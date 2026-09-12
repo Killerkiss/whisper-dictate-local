@@ -190,7 +190,7 @@ def record_command(
     channels: int,
     latency_ms: int = 20,
     device: str = "",
-    headset_mic: bool = False,
+    communication_role: bool = False,
 ) -> list[str]:
     """Command that writes raw s16le PCM to `raw_path` until killed."""
     tool = TOOLS.recorder
@@ -208,10 +208,12 @@ def record_command(
             f"--rate={sample_rate}",
             f"--channels={channels}",
         ]
-        if headset_mic:
-            # WirePlumber switches a Bluetooth headset to HSP/HFP only for
-            # streams marked as Communication, and restores the previous
-            # profile once the stream closes.
+        if communication_role:
+            # Asks the desktop to move a Bluetooth headset to HSP/HFP for the
+            # duration of this stream. Only set when the app could NOT switch
+            # the profile itself: WirePlumber applies the switch on a delay,
+            # which lands after our own restore and leaves the headset stuck
+            # in hands-free mode. See HeadsetSwitch.
             cmd.append("--property=media.role=Communication")
         if device:
             cmd += ["-d", device]

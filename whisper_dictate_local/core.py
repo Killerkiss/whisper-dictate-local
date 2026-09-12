@@ -68,10 +68,12 @@ class Recorder:
         # Put a Bluetooth headset into hands-free mode and record from it. In
         # A2DP it has no microphone at all, so without this the clip silently
         # comes from the laptop's own mic instead.
-        if headset_mic and not device:
+        switched = False
+        if headset_mic and (not device or device.startswith("bluez_input.")):
             headset_source = self._headset.engage()
             if headset_source:
-                device = headset_source
+                device = device or headset_source
+                switched = True
 
         cmd = backend.record_command(
             self.raw_path,
@@ -79,7 +81,11 @@ class Recorder:
             channels=CHANNELS,
             latency_ms=latency_ms,
             device=device,
-            headset_mic=headset_mic,
+            # Only ask the desktop to switch when we could not do it here.
+            # Doing both makes WirePlumber re-apply hands-free a second or two
+            # after we have restored A2DP, stranding the headset in narrowband
+            # mono until something else moves it back.
+            communication_role=headset_mic and not switched,
         )
 
         self._proc = subprocess.Popen(

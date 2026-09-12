@@ -538,13 +538,16 @@ are greyed out with the reason:
   the stream still carries that tag, but Ubuntu 24.04's WirePlumber 0.4.17
   ships an empty bluez rule set, so the policy never fires. Switching the card
   with `pactl` directly is a few lines and behaves identically everywhere.
-  Two details cost real debugging: the capture node is listed for about a
+  Three details cost real debugging. The capture node is listed for about a
   second after the switch with a state of `(null)`, and recording from it then
   produces an empty file and no error at all — so the app waits for a real
-  state, not merely for the node to exist. And a card caught mid-connection
-  reports its profile as `off`; restoring that verbatim would switch the
-  headset off entirely, so the restore falls back to the best A2DP profile the
-  card offers and verifies the change took.
+  state, not merely for the node to exist. A card caught mid-connection reports
+  its profile as `off`; restoring that verbatim would switch the headset off
+  entirely, so the restore falls back to the best A2DP profile the card offers
+  and verifies the change took. And setting `media.role=Communication` while
+  also switching by hand strands the headset in hands-free: the policy fires
+  on a delay and re-applies HSP/HFP after the restore, so the tag is now sent
+  only when the app cannot switch the profile itself.
 - **The app owns the global hotkey.** Cinnamon's custom-shortcut manager did not
   reliably pick up bindings written via `gsettings` outside its GUI, so the tray
   grabs the key with Keybinder instead.
@@ -579,12 +582,13 @@ app changes the card profile itself — `pactl set-card-profile` to HSP/HFP
 before recording, back to the previous profile afterwards — then records from
 the headset source explicitly.
 
-It does not rely on WirePlumber's own auto-switch policy. That policy exists,
-and the capture stream is still tagged `media.role=Communication` for setups
-where it works, but on Ubuntu 24.04 / Mint 22 (WirePlumber 0.4.17) the stock
-`50-bluez-config.lua` leaves its rule set empty, so `bluez5.autoswitch-profile`
-is never applied and nothing switches. Doing it directly behaves the same
-everywhere.
+It does not rely on WirePlumber's auto-switch policy, and deliberately does
+not tag the stream `media.role=Communication` when it switches the profile
+itself. Setting both makes the two fight: WirePlumber applies its switch a
+second or two late, after the app has already restored A2DP, and the headset
+is left stranded in hands-free mode until something else moves it back. The
+tag is still sent when the app *cannot* switch — no `pactl`, or no Bluetooth
+card — so machines where the policy does work are still covered.
 
 The trade-off remains: HSP/HFP is narrowband mono (CVSD 8 kHz, or mSBC 16 kHz
 where supported), so while recording, whatever you are listening to drops to
