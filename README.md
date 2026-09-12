@@ -95,7 +95,8 @@ input into another. On a Wayland session:
   `uk-dictate` command in the desktop's own keyboard settings; the CLI signals
   the running tray, so behaviour is identical to the built-in grab.
 
-Run `uk-dictate --check` to see exactly what your session supports.
+Run `uk-dictate --check` to see exactly what your session supports. The
+settings dialog adapts to it too — [see the screenshot](#settings).
 
 ### Without systemd
 
@@ -199,6 +200,13 @@ Right-click the panel icon → **Settings**. Every option lives in the UI across
 four tabs — General, Audio, Engine, Advanced — and nothing needs the JSON to be
 edited by hand. Stored in `~/.config/uk-dictate/config.json`.
 
+| General | Audio |
+|---|---|
+| ![The General tab: language, translation, result, shortcut and notification settings](docs/screenshots/settings-general.png) | ![The Audio tab: microphone, Bluetooth profile switching, the silence gate and capture latency](docs/screenshots/settings-audio.png) |
+
+Shown in Mint-Y-Dark; the dialog follows your GTK theme. Regenerate the
+screenshots after a UI change with `python3 tools/make_screenshots.py`.
+
 **The dialog only offers what your system can do.** Choices that cannot work
 are dropped from their list rather than shown and ignored — on Wayland there is
 no "type it" option at all, and no hold-to-talk without Xlib — and settings
@@ -210,6 +218,12 @@ A preference your *current* session cannot carry out is greyed out but kept:
 opening Settings on a Wayland login will not erase the "type it" choice you
 made on X11. It simply is not honoured until you are back on a session that
 supports it.
+
+The same tab on a Wayland session, where typing is impossible — *Result* offers
+only the clipboard, hold-to-talk is gone, and the shortcut and focus settings
+are greyed out with the reason:
+
+![The General tab on Wayland: a banner explains the session's limits, the Result list contains only the clipboard option, and the shortcut, hold-to-talk and focus settings are greyed out](docs/screenshots/settings-wayland.png)
 
 | Setting | Notes |
 |---|---|
