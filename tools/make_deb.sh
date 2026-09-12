@@ -57,6 +57,7 @@ EOF
 chmod 755 "$STAGE/usr/bin/$PKG" "$STAGE/usr/bin/$PKG-tray"
 
 cp "$ROOT/README.md" "$STAGE/usr/share/doc/$PKG/"
+cp "$ROOT/LICENSE"   "$STAGE/usr/share/doc/$PKG/copyright"
 
 # -- metadata ----------------------------------------------------------------
 # Alternatives on the indicator because distributions disagree about which of

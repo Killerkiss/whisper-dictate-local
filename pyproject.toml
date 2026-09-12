@@ -8,9 +8,14 @@ version = "0.2.0"
 description = "Local push-to-talk dictation: speak, and the text is typed into the focused window"
 readme = "README.md"
 requires-python = ">=3.9"
+# The table form rather than PEP 639's plain string: setuptools before 77
+# rejects `license = "MIT"` outright, and 68 is what Ubuntu 24.04 ships.
+license = { text = "MIT" }
+authors = [{ name = "Ruslan Kaihorodov" }]
 keywords = ["dictation", "speech-to-text", "whisper", "transcription", "translation"]
 classifiers = [
     "Environment :: X11 Applications :: GTK",
+    "License :: OSI Approved :: MIT License",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: POSIX :: Linux",
     "Operating System :: POSIX :: BSD",

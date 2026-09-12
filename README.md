@@ -34,6 +34,7 @@ bar front end that has not yet been run on a Mac — see
 | [Getting good results](#getting-good-results) | mic levels, Bluetooth headsets, hallucinations |
 | [Troubleshooting](#troubleshooting) | when nothing is typed |
 | [Design notes](#design-notes) | why it is built the way it is |
+| [Licence](#licence) | MIT |
 
 ## How it works
 
@@ -630,3 +631,8 @@ VRAM needed elsewhere? The engine releases it automatically after the idle
 timeout (Settings -> *Release VRAM after*), or stop it now from the tray menu.
 Dictation still works with it stopped: the first phrase pays ~4s to load the
 model, then it is fast again.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). whisper.cpp, which does the actual speech
+recognition, is MIT as well.
