@@ -56,6 +56,17 @@ them their first impression of the project.
 - no `@PLACEHOLDER@` survived into the notes
 - after publishing, both asset URLs return 200
 
+## Branch protection
+
+`master` requires a pull request with one approval, and refuses force pushes
+and deletion. The rules are **not** enforced for administrators, deliberately:
+`make_release.sh` pushes the version bump and the tag straight to `master`,
+and GitHub does not let anyone approve their own pull request — so enforcing
+them on the maintainer would mean no release could be cut without turning
+protection off first.
+
+Contributors get the full workflow; see `CONTRIBUTING.md`.
+
 ## Version numbers
 
 Ordinary semver, judged from the user's side: a fix that changes no behaviour
