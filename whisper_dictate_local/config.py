@@ -89,6 +89,11 @@ DEFAULTS: dict[str, Any] = {
     # Off by default: HSP/HFP is narrowband mono, and switching also degrades
     # whatever is playing for as long as the recording lasts.
     "request_headset_mic": False,
+    # Pause whatever is playing while recording, and resume it afterwards.
+    # Music bleeding into the microphone is the easiest way to make Whisper
+    # hallucinate. Off by default: acting on other applications is intrusive
+    # enough that it should be asked for rather than assumed.
+    "pause_media_while_recording": False,
     "max_recording_s": 300,
     # Start the speech engine on first use rather than at login, and shut it
     # down again once idle. The model costs ~3.5 GB of VRAM, worth reclaiming on

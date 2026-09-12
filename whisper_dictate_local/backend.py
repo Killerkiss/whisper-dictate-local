@@ -100,6 +100,9 @@ class Tools:
         # re-activate another client's window.
         self.window = _which("xdotool") if self.session == "x11" else None
         self.systemd = _which("systemctl")
+        # gdbus comes with GLib, so it is present anywhere GTK is. Used to talk
+        # MPRIS to media players; no extra package needed.
+        self.dbus = _which("gdbus")
         # macOS has no notify-send; osascript raises a Notification Centre
         # banner, which is the closest equivalent and needs nothing installed.
         self.notifier = _which("osascript") if is_macos() else _which("notify-send")
@@ -139,6 +142,11 @@ class Tools:
         return self.notifier is not None
 
     @property
+    def can_pause_media(self) -> bool:
+        """Whether media players can be paused while recording."""
+        return self.dbus is not None and not is_macos()
+
+    @property
     def can_switch_headset_profile(self) -> bool:
         """Needs pactl to change the card profile and parecord to capture from
         it. A headset in A2DP has no microphone at all, so this is what makes
@@ -168,7 +176,16 @@ class Tools:
             ("focus", self.window),
         ):
             lines.append(f"{job}: {Path(tool).name if tool else 'unavailable'}")
-        lines.append(f"engine: {'systemd' if self.systemd else 'child process'}")
+        # Report what make_engine would actually pick, not merely whether
+        # systemd exists: with the app installed from a package there is no
+        # user unit, and saying "systemd" there sends a bug report the wrong way.
+        if self.systemd and SystemdEngine(self.systemd).unit_installed():
+            engine = "systemd user service"
+        elif self.systemd:
+            engine = "child process (no user unit installed)"
+        else:
+            engine = "child process (no systemd)"
+        lines.append(f"engine: {engine}")
         return lines
 
 
@@ -309,6 +326,81 @@ def play(path: Path) -> None:
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as exc:
         log.warning("could not play %s: %s", path, exc)
+
+
+# -- pausing media players ----------------------------------------------------
+
+MPRIS_PATH = "/org/mpris/MediaPlayer2"
+MPRIS_PLAYER = "org.mpris.MediaPlayer2.Player"
+
+
+def _gdbus(*args: str) -> str:
+    if TOOLS.dbus is None:
+        return ""
+    try:
+        r = subprocess.run([TOOLS.dbus, *args], capture_output=True, text=True,
+                           timeout=5)
+        return r.stdout if r.returncode == 0 else ""
+    except (subprocess.SubprocessError, OSError):
+        return ""
+
+
+def mpris_players() -> list[str]:
+    """Bus names of every media player currently running."""
+    out = _gdbus("call", "--session", "--dest", "org.freedesktop.DBus",
+                 "--object-path", "/org/freedesktop/DBus",
+                 "--method", "org.freedesktop.DBus.ListNames")
+    return sorted(set(re.findall(r"org\.mpris\.MediaPlayer2\.[A-Za-z0-9_.-]+", out)))
+
+
+def _mpris_status(player: str) -> str:
+    out = _gdbus("call", "--session", "--dest", player,
+                 "--object-path", MPRIS_PATH,
+                 "--method", "org.freedesktop.DBus.Properties.Get",
+                 MPRIS_PLAYER, "PlaybackStatus")
+    match = re.search(r"<'([^']*)'>", out)
+    return match.group(1) if match else ""
+
+
+def _mpris_call(player: str, method: str) -> bool:
+    return _gdbus("call", "--session", "--dest", player,
+                  "--object-path", MPRIS_PATH,
+                  "--method", f"{MPRIS_PLAYER}.{method}") != "" or True
+
+
+class MediaPause:
+    """Pause whatever is playing for the duration of a recording.
+
+    Music bleeding into the microphone is the single easiest way to make
+    Whisper hallucinate, and on a Bluetooth headset the switch to hands-free
+    mangles the audio anyway. Done over MPRIS, which every Linux media player
+    implements, so it works for Spotify, browsers, VLC and mpv alike.
+
+    Only players that were actually playing are touched, and only those are
+    resumed: something the user had already paused stays paused.
+    """
+
+    def __init__(self) -> None:
+        self._paused: list[str] = []
+
+    def pause(self) -> None:
+        if not TOOLS.can_pause_media:
+            return
+        for player in mpris_players():
+            if _mpris_status(player) != "Playing":
+                continue
+            _mpris_call(player, "Pause")
+            self._paused.append(player)
+        if self._paused:
+            log.info("paused %s", ", ".join(p.rsplit(".", 1)[-1] for p in self._paused))
+
+    def resume(self) -> None:
+        paused, self._paused = self._paused, []
+        for player in paused:
+            # It may have quit meanwhile; a failed call is not worth reporting.
+            _mpris_call(player, "Play")
+        if paused:
+            log.info("resumed %s", ", ".join(p.rsplit(".", 1)[-1] for p in paused))
 
 
 # -- bluetooth headset profile ------------------------------------------------

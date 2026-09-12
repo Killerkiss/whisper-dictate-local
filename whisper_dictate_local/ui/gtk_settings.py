@@ -355,6 +355,20 @@ class SettingsDialog(Gtk.Window):
                  "records with another tool",
         )
 
+        self.pause_check = Gtk.CheckButton(
+            label="Pause music and video while recording")
+        self.pause_check.set_active(bool(cfg["pause_media_while_recording"]))
+        page.add_wide(
+            self.pause_check,
+            hint="Pauses any running media player over MPRIS and resumes it "
+                 "when the recording stops. Only players that were actually "
+                 "playing are touched, so something you had already paused "
+                 "stays that way. Worth turning on: audio bleeding into the "
+                 "microphone is the easiest way to make Whisper invent text.",
+            unavailable="" if backend.TOOLS.can_pause_media
+            else "needs gdbus, and MPRIS does not exist on macOS",
+        )
+
         adj = Gtk.Adjustment(value=float(cfg["silence_threshold_db"]),
                              lower=-70, upper=-20, step_increment=1, page_increment=5)
         self.silence_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=adj)
@@ -465,6 +479,7 @@ class SettingsDialog(Gtk.Window):
         c["capture_latency_ms"] = int(self.latency_spin.get_value())
         c["input_device"] = self.device_combo.get_active_id() or ""
         c["request_headset_mic"] = self.headset_check.get_active()
+        c["pause_media_while_recording"] = self.pause_check.get_active()
         c["max_recording_s"] = int(self.maxrec_spin.get_value())
         c["type_delay_ms"] = int(self.delay_spin.get_value())
 

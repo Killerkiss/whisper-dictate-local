@@ -103,6 +103,7 @@ def _standalone_toggle(cfg: Config) -> int:
         latency_ms=cfg["capture_latency_ms"],
         device=str(cfg["input_device"]),
         headset_mic=bool(cfg["request_headset_mic"]),
+        pause_media=bool(cfg["pause_media_while_recording"]),
     )
     recorder.wait_until_live()
     if recorder._proc is not None:

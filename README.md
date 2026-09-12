@@ -475,6 +475,7 @@ are greyed out with the reason:
 | Result | Type it, copy it, or both. Some Electron/Java apps ignore synthetic keystrokes — the clipboard copy is the fallback. |
 | Global shortcut | GTK accelerator syntax (`F8`, `<Super>space`). The app grabs it itself via Keybinder rather than relying on the desktop's shortcut manager. |
 | Shortcut behaviour | Toggle, or hold-to-talk. |
+| Pause media while recording | Pauses any running player over MPRIS and resumes it afterwards. Off by default. |
 | Silence cutoff | A clip must clear this peak level *and* show at least 8 dB between peak and noise floor. **Do not disable**: fed silence, Whisper invents fluent sentences. |
 | Typing delay | Raise if an app drops characters. |
 | Vocabulary hint | Bias text for names and jargon Whisper mangles. |
@@ -537,6 +538,13 @@ are greyed out with the reason:
   so `capture_output=True` waits for an EOF that only arrives when someone else
   copies something, blocking each dictation for the full 10s timeout and then
   raising. Closing stdout and stderr instead takes it from 10s to 4ms.
+- **Media players are paused over MPRIS, not by muting.** Muting would stop
+  you hearing the music without stopping it bleeding from the headphones into
+  the microphone, which is the actual problem — audio in the clip is the
+  easiest way to make Whisper invent text. MPRIS is also the only approach
+  that knows *what was playing*: only players reporting `Playing` are touched,
+  and only those are resumed, so something already paused stays paused. It
+  needs no new dependency, since `gdbus` ships with GLib.
 - **The Bluetooth profile is switched by the app, not by the desktop.**
   WirePlumber is meant to do it in response to `media.role=Communication`, and
   the stream still carries that tag, but Ubuntu 24.04's WirePlumber 0.4.17
@@ -558,6 +566,9 @@ are greyed out with the reason:
 
 ## Getting good results
 
+- **Turn off anything playing**, or switch on *Pause music and video while
+  recording*. Whisper transcribes what it hears, and music leaking from
+  headphones into the microphone is a reliable way to get invented text.
 - **Speak a full sentence.** Whisper uses context; it hallucinates far more on
   one- or two-word fragments than on connected speech.
 - **You can speak immediately.** Capture is live ~50ms after the keypress.

@@ -195,6 +195,7 @@ class TrayApp:
                 latency_ms=self.cfg["capture_latency_ms"],
                 device=str(self.cfg["input_device"]),
                 headset_mic=bool(self.cfg["request_headset_mic"]),
+                pause_media=bool(self.cfg["pause_media_while_recording"]),
             )
         except DictationError as exc:
             self._notify(f"Error: {exc}", level="error")

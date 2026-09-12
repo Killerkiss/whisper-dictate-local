@@ -43,6 +43,7 @@ class Recorder:
         self._proc: subprocess.Popen | None = None
         self.source_window: str | None = None
         self._headset = backend.HeadsetSwitch()
+        self._media = backend.MediaPause()
 
     @property
     def active(self) -> bool:
@@ -54,6 +55,7 @@ class Recorder:
         latency_ms: int = 20,
         device: str = "",
         headset_mic: bool = False,
+        pause_media: bool = False,
     ) -> None:
         if self.active:
             return
@@ -68,6 +70,12 @@ class Recorder:
         # Put a Bluetooth headset into hands-free mode and record from it. In
         # A2DP it has no microphone at all, so without this the clip silently
         # comes from the laptop's own mic instead.
+        # Before the profile switch: on a Bluetooth headset that switch already
+        # interrupts playback, and pausing first makes the gap deliberate
+        # rather than a stutter.
+        if pause_media:
+            self._media.pause()
+
         switched = False
         if headset_mic and (not device or device.startswith("bluez_input.")):
             headset_source = self._headset.engage()
@@ -123,6 +131,7 @@ class Recorder:
             self._proc.wait(timeout=5)
         proc, self._proc = self._proc, None
         self._headset.restore()
+        self._media.resume()
 
         if not self.raw_path.exists() or self.raw_path.stat().st_size == 0:
             stderr = (proc.stderr.read().decode(errors="replace") if proc.stderr else "").strip()
@@ -140,6 +149,7 @@ class Recorder:
                 self._proc.kill()
             self._proc = None
         self._headset.restore()
+        self._media.resume()
         self.raw_path.unlink(missing_ok=True)
         self.wav_path.unlink(missing_ok=True)
 
