@@ -18,8 +18,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from . import backend  # noqa: E402
-from .config import CONFIG_PATH, Config  # noqa: E402
+from .. import backend  # noqa: E402
+from ..config import CONFIG_PATH, Config  # noqa: E402
 
 
 def _hold_supported() -> bool:
@@ -28,35 +28,15 @@ def _hold_supported() -> bool:
     if not backend.TOOLS.can_grab_hotkey:
         return False
     try:
-        from . import keystate
+        from . import gtk_keystate as keystate
 
         return keystate.available()
     except Exception:  # noqa: BLE001 - the dialog must open regardless
         return False
 
 
-LANGUAGES = [
-    ("auto", "Auto-detect"),
-    ("uk", "Ukrainian"),
-    ("en", "English"),
-    ("pl", "Polish"),
-    ("de", "German"),
-    ("es", "Spanish"),
-    ("fr", "French"),
-]
-
-ALL_OUTPUT_MODES = [
-    ("type_and_copy", "Type it and copy to clipboard", ("type", "copy")),
-    ("type", "Type it into the focused window", ("type",)),
-    ("copy", "Copy to clipboard only", ("copy",)),
-]
-
-
-def _output_modes() -> list[tuple[str, str]]:
-    """Only the delivery modes this machine can actually carry out."""
-    can = {"type": backend.TOOLS.can_type, "copy": backend.TOOLS.can_copy}
-    return [(code, label) for code, label, needs in ALL_OUTPUT_MODES
-            if all(can[n] for n in needs)]
+# Shared with the macOS front end so the two cannot offer different choices.
+from .options import LANGUAGES, output_modes as _output_modes  # noqa: E402
 
 
 class _Page(Gtk.Grid):
@@ -338,7 +318,7 @@ class SettingsDialog(Gtk.Window):
     def _page_audio(self) -> Gtk.Widget:
         cfg, page = self.cfg, _Page()
 
-        from .core import input_devices
+        from ..core import input_devices
 
         self.device_combo = Gtk.ComboBoxText()
         self.device_combo.append("", "System default")

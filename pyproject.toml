@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whisper-dictate-local"
+version = "0.2.0"
+description = "Local push-to-talk dictation: speak, and the text is typed into the focused window"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["dictation", "speech-to-text", "whisper", "transcription", "translation"]
+classifiers = [
+    "Environment :: X11 Applications :: GTK",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: POSIX :: BSD",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+# Deliberately minimal. Everything else the app uses is either in the standard
+# library or an external command it probes for at run time, which keeps this
+# installable on any Unix without a compiler.
+dependencies = ["requests>=2.20"]
+
+[project.optional-dependencies]
+# The macOS menu bar front end. Not installed by default: on Linux these
+# wheels are useless, and pulling PyObjC in there would be a large download
+# for nothing.
+macos = [
+    "rumps>=0.4.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=9.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'",
+]
+
+# NOTE: the GTK front end has no extra here on purpose. PyGObject and the app
+# indicator typelibs cannot be installed reliably from PyPI -- they need GTK
+# development headers and matching GObject introspection data -- so they must
+# come from the system package manager. See the README for the per-distribution
+# package names. `whisper-dictate-local-tray` prints them if they are missing.
+
+[project.scripts]
+whisper-dictate-local = "whisper_dictate_local.cli:main"
+whisper-dictate-local-tray = "whisper_dictate_local.ui:main"
+
+[project.urls]
+Homepage = "https://github.com/Killerkiss/whisper-dictate-local"
+Issues = "https://github.com/Killerkiss/whisper-dictate-local/issues"
+
+[tool.setuptools.packages.find]
+include = ["whisper_dictate_local*"]
+
+[tool.setuptools.package-data]
+whisper_dictate_local = ["icons/*.svg"]

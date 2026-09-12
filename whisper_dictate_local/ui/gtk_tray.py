@@ -23,9 +23,10 @@ except (ValueError, ImportError):  # pragma: no cover - depends on distro packag
 
 from gi.repository import GLib, Gtk, Keybinder, Notify  # noqa: E402
 
-from . import backend, keystate, sounds  # noqa: E402
-from .config import Config  # noqa: E402
-from .core import (  # noqa: E402
+from .. import backend, sounds  # noqa: E402
+from . import gtk_keystate as keystate  # noqa: E402
+from ..config import Config  # noqa: E402
+from ..core import (  # noqa: E402
     STATE_DIR,
     DictationError,
     Recorder,
@@ -34,7 +35,7 @@ from .core import (  # noqa: E402
     has_speech,
     transcribe,
 )
-from .settings_dialog import SettingsDialog  # noqa: E402
+from .gtk_settings import SettingsDialog  # noqa: E402
 
 log = logging.getLogger(__name__)
 

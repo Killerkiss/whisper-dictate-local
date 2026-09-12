@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.whisper-dictate-local</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>@BIN_DIR@/whisper-dictate-local-tray</string>
+  </array>
+
+  <!-- Start the menu bar item at login. The speech engine is NOT started
+       here: the app brings it up on the first dictation and shuts it down
+       once idle, so the model is not resident all day. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <false/>
+
+  <!-- Interactive so it may talk to the window server and draw a menu bar
+       item; a Background agent cannot. -->
+  <key>ProcessType</key>
+  <string>Interactive</string>
+
+  <key>StandardOutPath</key>
+  <string>@LOG@</string>
+  <key>StandardErrorPath</key>
+  <string>@LOG@</string>
+</dict>
+</plist>

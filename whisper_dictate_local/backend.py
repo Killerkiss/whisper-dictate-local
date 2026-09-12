@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -98,7 +99,9 @@ class Tools:
         # re-activate another client's window.
         self.window = _which("xdotool") if self.session == "x11" else None
         self.systemd = _which("systemctl")
-        self.notifier = _which("notify-send")
+        # macOS has no notify-send; osascript raises a Notification Centre
+        # banner, which is the closest equivalent and needs nothing installed.
+        self.notifier = _which("osascript") if is_macos() else _which("notify-send")
 
     # -- capabilities ------------------------------------------------------
     # The settings UI asks these rather than testing for tools itself, so what
@@ -223,6 +226,8 @@ def record_command(
 
 def input_devices() -> list[tuple[str, str]]:
     """Available capture devices as (name, description), monitors excluded."""
+    if is_macos():
+        return _avfoundation_devices()
     if TOOLS.device_lister is None:
         return []
     try:
@@ -248,6 +253,43 @@ def input_devices() -> list[tuple[str, str]]:
             if name and not name.endswith(".monitor"):
                 devices.append((name, desc or name))
             name = desc = ""
+    return devices
+
+
+def _avfoundation_devices() -> list[tuple[str, str]]:
+    """Audio capture devices as macOS numbers them.
+
+    ffmpeg addresses avfoundation inputs by index, not name, so the index is
+    what gets stored in the config -- hence a device can change identity if
+    one is unplugged. Listing is a deliberate error: the command has no
+    "just list" mode and always exits non-zero after printing to stderr.
+    """
+    if TOOLS.recorder is None or Path(TOOLS.recorder).name != "ffmpeg":
+        return []
+    try:
+        result = subprocess.run(
+            [TOOLS.recorder, "-hide_banner", "-f", "avfoundation",
+             "-list_devices", "true", "-i", ""],
+            capture_output=True, text=True, timeout=15,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("could not list avfoundation devices: %s", exc)
+        return []
+
+    devices: list[tuple[str, str]] = []
+    in_audio = False
+    for line in result.stderr.splitlines():
+        if "AVFoundation audio devices" in line:
+            in_audio = True
+            continue
+        if "AVFoundation video devices" in line:
+            in_audio = False
+            continue
+        if not in_audio:
+            continue
+        match = re.search(r"\[(\d+)\]\s+(.+?)\s*$", line)
+        if match:
+            devices.append((f":{match.group(1)}", match.group(2)))
     return devices
 
 
@@ -341,6 +383,15 @@ def copy_text(text: str) -> None:
 
 def notify(title: str, message: str, icon: str = "audio-input-microphone") -> None:
     if TOOLS.notifier is None:
+        return
+    if Path(TOOLS.notifier).name == "osascript":
+        # Text is passed as arguments rather than interpolated into the script:
+        # a transcript containing a quote would otherwise be a syntax error at
+        # best, and arbitrary AppleScript at worst.
+        script = ('on run argv\n'
+                  'display notification (item 1 of argv) with title (item 2 of argv)\n'
+                  'end run')
+        subprocess.run([TOOLS.notifier, "-e", script, message, title], check=False)
         return
     subprocess.run([TOOLS.notifier, "-t", "2500", "-i", icon, title, message],
                    check=False)

@@ -16,8 +16,10 @@ It works two ways, switched by a single setting:
 The author's daily use is Ukrainian in, English out, which is why the shortlist
 and the defaults start there.
 
-Developed on Linux Mint / Cinnamon, and works on any **X11** desktop.
-Wayland is limited to clipboard output — see [Compatibility](#compatibility).
+Developed on Linux Mint / Cinnamon, and works on any **X11** desktop. Wayland
+is limited unless `wtype` or `ydotool` is present, and there is a macOS menu
+bar front end that has not yet been run on a Mac — see
+[Compatibility](#compatibility).
 
 **Just want it running?** → [Requirements](#requirements) → [Install](#install)
 
@@ -69,7 +71,12 @@ ship a Wayland session by default.
 | Session | Result |
 |---|---|
 | **X11 / Xorg** | everything works: typing, hold-to-talk, focus restore |
-| **Wayland** | clipboard output only — see below |
+| **Wayland** | clipboard output, unless `wtype` or `ydotool` is installed |
+| **macOS** | menu bar front end, written but [never run on a Mac](#macos--needs-testing) |
+| **BSD** | [should work](#bsd--should-work-untested), untested, CPU-only |
+
+The command-line half — record, transcribe, deliver — has no Linux dependency
+left in it and runs anywhere Python does. Only the tray is toolkit-bound.
 
 ### Verified
 
@@ -132,15 +139,54 @@ being reloaded on every phrase. Set `whisper_server` in the config if the
 binary is not at `~/opt/whisper.cpp/build/bin/whisper-server`; `install.sh`
 skips the unit file, and everything else installs as usual.
 
-### Not supported
+### macOS — needs testing
 
-- **macOS.** The audio, clipboard and typing backends have macOS branches
-  (`ffmpeg`, `pbcopy`, `osascript`), but the UI does not: the panel icon and
-  settings window are GTK with an X11 app indicator, and there is no menu bar
-  equivalent yet. The global hotkey and hold-to-talk would also need Carbon and
-  Quartz rather than Keybinder and Xlib.
-- **BSD.** Untested. X11, GTK and PulseAudio all exist in ports, so it is
-  plausible; there is no CUDA, so expect CPU-only inference.
+There is a menu bar front end, and the audio, clipboard, typing and
+notification backends all have macOS branches (`ffmpeg`, `pbcopy`, `osascript`,
+`afplay`). The speech engine runs as a tracked child process, since there is no
+systemd to hand it to.
+
+**It has never been run on a Mac.** It was written against the documented APIs
+and its logic is covered by tests on Linux, but every Cocoa and Quartz call is
+unverified. Treat it as a first draft and please report what breaks.
+
+```bash
+brew install ffmpeg
+git clone https://github.com/ggml-org/whisper.cpp ~/opt/whisper.cpp
+cd ~/opt/whisper.cpp && cmake -B build && cmake --build build -j
+# Metal is on by default on Apple Silicon; no CUDA toolchain needed.
+curl -L -o models/ggml-large-v3.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
+
+pip install 'whisper-dictate-local[macos] @ git+https://github.com/Killerkiss/whisper-dictate-local'
+./install.sh
+```
+
+macOS will ask for **Microphone** access on the first dictation. Typing and the
+global shortcut additionally need **Accessibility** (System Settings → Privacy
+& Security → Accessibility), and macOS will not prompt for an unsigned
+interpreter — add your terminal or the Python binary by hand.
+
+Without Accessibility the app still works: set *Result* to **Copy to
+clipboard** and bind a key to the `whisper-dictate-local` command in Raycast,
+Hammerspoon, Karabiner or an Automator Quick Action. The CLI signals the
+running menu bar app, so behaviour is identical to the built-in shortcut —
+the same arrangement Wayland users have with their compositor.
+
+Settings on macOS are menu items rather than a dialog: language, translate and
+result are toggles in the menu, and **Edit settings file…** opens the JSON for
+everything else.
+
+### BSD — should work, untested
+
+X11, GTK3, PyGObject, PulseAudio, `xdotool` and `xclip` are all in ports, and
+the lack of systemd is already handled. Expect CPU-only inference; there is no
+CUDA. If you try it, a report either way is welcome.
+
+```sh
+# FreeBSD
+pkg install python3 py39-gobject3 py39-requests pulseaudio xdotool xclip bash
+```
 
 ### Dependencies by distribution
 
@@ -203,13 +249,46 @@ transcription only, and its translation quality is noticeably worse.
 
 ## Install
 
+Two halves: the Python package, and the desktop integration.
+
+### The package
+
+```bash
+pipx install git+https://github.com/Killerkiss/whisper-dictate-local
+# or, for the macOS menu bar:
+pip install 'whisper-dictate-local[macos] @ git+https://github.com/Killerkiss/whisper-dictate-local'
+```
+
+Only `requests` is pulled in. Everything else the app uses is either the
+standard library or an external command it looks for at run time, so there is
+no compiler involved and this works on any Unix.
+
+**The GTK tray is deliberately not a Python dependency.** PyGObject and the app
+indicator typelibs cannot be installed reliably from PyPI — they need GTK
+headers and matching introspection data — so they come from your system package
+manager instead; see [Dependencies by
+distribution](#dependencies-by-distribution). The command-line half works
+without them, and `whisper-dictate-local-tray` prints what is missing.
+
+### Desktop integration
+
 ```bash
 ./install.sh          # DICTATE_KEY=F8 ./install.sh to pick another shortcut
 whisper-dictate-local-tray &
 ```
 
-This symlinks the launchers into `~/.local/bin`, enables the speech engine as a
-user service, autostarts the tray, and binds the shortcut.
+The script branches on what the system is, not on what it is called:
+
+| | Linux / BSD | macOS |
+|---|---|---|
+| launchers | `~/.local/bin` | `~/.local/bin` |
+| autostart | `.desktop` in `~/.config/autostart` | LaunchAgent in `~/Library/LaunchAgents` |
+| icons | hicolor theme | none — the menu bar uses text |
+| speech engine | systemd user service | child process, tracked by pidfile |
+| shortcut | bound via Cinnamon's `gsettings` if present | bound by you, see [macOS](#macos--needs-testing) |
+
+It is safe to re-run, and it removes the leftovers of the old `uk-dictate`
+install if it finds any.
 
 ## Panel icon
 
