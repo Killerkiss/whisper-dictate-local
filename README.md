@@ -35,6 +35,7 @@ bar front end that has not yet been run on a Mac — see
 | [Getting good results](#getting-good-results) | mic levels, Bluetooth headsets, hallucinations |
 | [Troubleshooting](#troubleshooting) | when nothing is typed |
 | [Design notes](#design-notes) | why it is built the way it is |
+| [Releasing](#releasing) | how a release is cut |
 | [Licence](#licence) | MIT |
 
 ## How it works
@@ -690,6 +691,13 @@ VRAM needed elsewhere? The engine releases it automatically after the idle
 timeout (Settings -> *Release VRAM after*), or stop it now from the tray menu.
 Dictation still works with it stopped: the first phrase pays ~4s to load the
 model, then it is fast again.
+
+## Releasing
+
+`docs/RELEASING.md` covers it. The short version is that the install commands
+in the release notes are generated from a template rather than written out,
+because every one of them contains the version number and a stale install
+command only ever fails for strangers.
 
 ## Licence
 

@@ -1,0 +1,60 @@
+## Install
+
+Every route ends with `whisper-dictate-local --setup`, which looks at your
+hardware, recommends a model, downloads it and the speech engine, and offers
+to bind a key. Nothing here needs PyPI — both files are attached to this
+release.
+
+### Debian, Ubuntu, Mint
+
+```bash
+curl -LO @REPO@/releases/download/v@VERSION@/whisper-dictate-local_@VERSION@_all.deb
+sudo apt install ./whisper-dictate-local_@VERSION@_all.deb
+whisper-dictate-local --setup
+```
+
+apt resolves GTK, the app indicator, Keybinder, `xdotool`, `xclip` and
+PulseAudio for you. The leading `./` matters — without a slash, apt reads the
+argument as a package name to look up.
+
+### pip or pipx — any other Unix
+
+From the wheel attached to this release:
+
+```bash
+pipx install @REPO@/releases/download/v@VERSION@/whisper_dictate_local-@VERSION@-py3-none-any.whl
+whisper-dictate-local --setup
+```
+
+Or straight from the repository, for unreleased changes:
+
+```bash
+pipx install git+@REPO@
+```
+
+Or with the macOS menu bar front end (rumps and PyObjC):
+
+```bash
+pip install 'whisper-dictate-local[macos] @ git+@REPO@'
+```
+
+`pip install` works in place of `pipx install` everywhere above; pipx is
+suggested only because it keeps the app in its own environment.
+
+`requests` is the only dependency pulled in — everything else is an external
+command probed for at run time, so there is nothing to compile. **The GTK
+tray is deliberately not a Python dependency**: PyGObject and the app
+indicator typelibs cannot be installed reliably from PyPI, so they come from
+your system package manager. The command-line half works without them, and
+`whisper-dictate-local-tray` prints the package names if they are missing.
+
+### From a checkout
+
+```bash
+git clone @REPO@
+cd whisper-dictate-local
+./install.sh          # desktop entry, icons, launchers
+whisper-dictate-local --setup
+```
+
+`./tools/make_deb.sh` builds the `.deb` from the same checkout.
