@@ -1,0 +1,14 @@
+[Unit]
+Description=whisper.cpp server (dictation backend)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=@WHISPER_BIN@ --model @MODEL@ --host 127.0.0.1 --port 8910 --threads 4 --convert
+Restart=on-failure
+RestartSec=3
+# keep it off the critical path on a dev machine
+Nice=5
+
+[Install]
+WantedBy=default.target

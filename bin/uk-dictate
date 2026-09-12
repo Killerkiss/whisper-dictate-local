@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Toggle dictation. Bind this to a global keyboard shortcut.
+# Resolves through symlinks so it works from ~/.local/bin too.
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+exec env PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m ukdictate.cli "$@"

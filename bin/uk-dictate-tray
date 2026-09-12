@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Panel indicator for dictation.
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+exec env PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -c "from ukdictate.tray import main; raise SystemExit(main())" "$@"
