@@ -19,6 +19,20 @@ and the defaults start there.
 Developed on Linux Mint / Cinnamon, and works on any **X11** desktop.
 Wayland is limited to clipboard output — see [Compatibility](#compatibility).
 
+**Just want it running?** → [Requirements](#requirements) → [Install](#install)
+
+| Section | What is in it |
+|---|---|
+| [How it works](#how-it-works) | the pipeline, and the two shortcut behaviours |
+| [Compatibility](#compatibility) | which distributions and sessions this runs on |
+| [Requirements](#requirements) | packages, and building whisper.cpp with CUDA |
+| [Install](#install) | one script |
+| [Panel icon](#panel-icon) | what each colour means |
+| [Settings](#settings) | every option, with screenshots |
+| [Getting good results](#getting-good-results) | mic levels, Bluetooth headsets, hallucinations |
+| [Troubleshooting](#troubleshooting) | when nothing is typed |
+| [Design notes](#design-notes) | why it is built the way it is |
+
 ## How it works
 
 ```
