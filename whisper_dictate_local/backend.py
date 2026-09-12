@@ -431,6 +431,15 @@ class SystemdEngine(Engine):
         return subprocess.run([self._systemctl, "--user", *args],
                               capture_output=True, text=True, check=False)
 
+    def unit_installed(self) -> bool:
+        """Whether the unit file exists at all.
+
+        A package install puts the app on the system without writing a user
+        unit -- only install.sh does that -- so systemd being present is not
+        enough to conclude it manages the engine.
+        """
+        return self._run("cat", self.SERVICE).returncode == 0
+
     def is_running(self) -> bool:
         return self._run("is-active", "--quiet", self.SERVICE).returncode == 0
 
@@ -517,9 +526,19 @@ class ProcessEngine(Engine):
 
 
 def make_engine(cfg) -> Engine:
-    """Pick the engine manager this system can actually use."""
+    """Pick the engine manager this system can actually use.
+
+    systemd is preferred only when the unit is actually installed. Without
+    that check a packaged install -- which ships no unit -- would hand every
+    start to systemctl, watch it fail, and quietly fall back to the CLI path
+    that reloads the whole model on every phrase.
+    """
     if TOOLS.systemd is not None:
-        return SystemdEngine(TOOLS.systemd)
-    log.info("systemctl unavailable; managing the speech engine directly")
+        systemd = SystemdEngine(TOOLS.systemd)
+        if systemd.unit_installed():
+            return systemd
+        log.info("no whisper-server user unit; managing the engine directly")
+    else:
+        log.info("systemctl unavailable; managing the speech engine directly")
     return ProcessEngine(cfg.path("whisper_server"), cfg.path("model"),
                          str(cfg["server_url"]))

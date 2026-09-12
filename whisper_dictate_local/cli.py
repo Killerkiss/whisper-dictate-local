@@ -142,10 +142,21 @@ def main(argv: list[str] | None = None) -> int:
                         help="ignore a running tray app and record standalone")
     parser.add_argument("--check", action="store_true",
                         help="report which backend was detected, then exit")
+    parser.add_argument("--setup", action="store_true",
+                        help="detect the hardware and fetch the model and engine")
+    parser.add_argument("--yes", "-y", action="store_true",
+                        help="with --setup, accept every prompt")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with --setup, show what would happen and change nothing")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING)
     cfg = Config.load()
+
+    if args.setup:
+        from .setup_wizard import run  # imported late: it is not on the hot path
+
+        return run(assume_yes=args.yes, dry_run=args.dry_run)
 
     if args.check:
         return _check(cfg)

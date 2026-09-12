@@ -228,7 +228,36 @@ dictation, so drop to a smaller model rather than waiting.
 
 ## Install
 
+Whatever platform you are on, the last step is the same:
+
+```bash
+whisper-dictate-local --setup
+```
+
+It reports what the machine can do, detects the GPU and how much memory it
+has, recommends a model to match, and downloads that model along with a speech
+engine — fetching the prebuilt one where that suits the hardware, or printing
+the right `cmake` line where it does not. `--dry-run` shows what it would do
+and changes nothing; `--yes` accepts every prompt.
+
+This step cannot be skipped by packaging: `large-v3` is 2.9 GiB, over GitHub's
+2 GiB per-asset limit and far past what belongs in a distribution package.
+
 ### Linux
+
+**From a package** (Debian, Ubuntu, Mint):
+
+```bash
+sudo apt install ./whisper-dictate-local_0.2.0_all.deb
+whisper-dictate-local --setup
+```
+
+apt resolves GTK, the app indicator, Keybinder, `xdotool`, `xclip` and
+PulseAudio for you — the part that is otherwise easy to get wrong. The package
+contains the application only; `--setup` fetches the rest. Build it yourself
+with `./tools/make_deb.sh`.
+
+**From source** (any distribution):
 
 ```bash
 # 1. system packages -- Debian/Ubuntu/Mint shown; see "Dependencies by
@@ -538,9 +567,10 @@ subtitles in its training data. Check the mic, not the settings.
 ## Troubleshooting
 
 ```bash
-whisper-dictate-local --check                         # what this machine supports
-journalctl --user -u whisper-server -f     # engine logs
-whisper-dictate-local --no-tray                       # bypass the tray
+whisper-dictate-local --setup       # detect hardware, fetch the model and engine
+whisper-dictate-local --check       # what this machine supports
+whisper-dictate-local --no-tray     # bypass the tray
+journalctl --user -u whisper-server -f          # engine logs, if systemd runs it
 systemctl --user restart whisper-server
 ```
 
