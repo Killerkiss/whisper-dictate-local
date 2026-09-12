@@ -250,8 +250,8 @@ This step cannot be skipped by packaging: `large-v3` is 2.9 GiB, over GitHub's
 **From a package** (Debian, Ubuntu, Mint):
 
 ```bash
-curl -LO https://github.com/Killerkiss/whisper-dictate-local/releases/download/v0.2.0/whisper-dictate-local_0.2.0_all.deb
-sudo apt install ./whisper-dictate-local_0.2.0_all.deb
+curl -LO https://github.com/Killerkiss/whisper-dictate-local/releases/download/v0.3.0/whisper-dictate-local_0.3.0_all.deb
+sudo apt install ./whisper-dictate-local_0.3.0_all.deb
 whisper-dictate-local --setup
 ```
 
@@ -285,7 +285,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=1 \
 cmake --build build -j"$(nproc)"
 
 # 3. the app
-pipx install https://github.com/Killerkiss/whisper-dictate-local/releases/download/v0.2.0/whisper_dictate_local-0.2.0-py3-none-any.whl
+pipx install https://github.com/Killerkiss/whisper-dictate-local/releases/download/v0.3.0/whisper_dictate_local-0.3.0-py3-none-any.whl
 # or, for the latest changes:  pipx install git+https://github.com/Killerkiss/whisper-dictate-local
 ./install.sh          # DICTATE_KEY=F8 ./install.sh to pick another shortcut
 whisper-dictate-local-tray &
