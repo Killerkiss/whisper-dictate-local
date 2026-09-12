@@ -1,7 +1,8 @@
 """Recording, transcription and text output.
 
 Deliberately free of any GTK import so the same code backs both the tray app
-and the headless CLI toggle.
+and the headless CLI toggle, and free of any OS-specific command: which binary
+records audio or types text is `backend`'s problem, not this module's.
 """
 
 from __future__ import annotations
@@ -9,8 +10,6 @@ from __future__ import annotations
 import array
 import logging
 import math
-import os
-import shutil
 import subprocess
 import time
 import wave
@@ -18,6 +17,8 @@ from pathlib import Path
 
 import requests
 
+from . import backend
+from .backend import STATE_DIR, DictationError  # re-exported: callers import them here
 from .config import Config
 
 log = logging.getLogger(__name__)
@@ -30,19 +31,6 @@ SAMPLE_WIDTH = 2  # s16le
 # competing CLI run that would load its own copy of the model.
 ENGINE_WAIT_ATTEMPTS = 6
 ENGINE_WAIT_INTERVAL_S = 1.5
-
-STATE_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "uk-dictate"
-
-
-class DictationError(Exception):
-    """Anything the user should be told about in plain language."""
-
-
-def _require(binary: str) -> str:
-    found = shutil.which(binary)
-    if not found:
-        raise DictationError(f"'{binary}' is not installed")
-    return found
 
 
 class Recorder:
@@ -68,32 +56,22 @@ class Recorder:
     ) -> None:
         if self.active:
             return
-        _require("parecord")
         self.raw_path.unlink(missing_ok=True)
         self.wav_path.unlink(missing_ok=True)
 
         # Remember where the text should land. Opening a tray menu moves focus
         # to the panel, so without this the transcript can be typed into the
         # wrong window.
-        self.source_window = _active_window() if remember_focus else None
+        self.source_window = backend.active_window() if remember_focus else None
 
-        cmd = [
-            "parecord",
-            # Without an explicit latency PulseAudio buffers so aggressively
-            # that the first ~1s of every clip is lost.
-            f"--latency-msec={max(1, int(latency_ms))}",
-            "--format=s16le",
-            f"--rate={SAMPLE_RATE}",
-            f"--channels={CHANNELS}",
-        ]
-        if headset_mic:
-            # WirePlumber switches a Bluetooth headset to HSP/HFP only for
-            # streams marked as Communication, and restores the previous
-            # profile once the stream closes.
-            cmd.append("--property=media.role=Communication")
-        if device:
-            cmd += ["-d", device]
-        cmd += ["--raw", str(self.raw_path)]
+        cmd = backend.record_command(
+            self.raw_path,
+            sample_rate=SAMPLE_RATE,
+            channels=CHANNELS,
+            latency_ms=latency_ms,
+            device=device,
+            headset_mic=headset_mic,
+        )
 
         self._proc = subprocess.Popen(
             cmd,
@@ -149,32 +127,8 @@ class Recorder:
         self.wav_path.unlink(missing_ok=True)
 
 
-def input_devices() -> list[tuple[str, str]]:
-    """Available capture devices as (name, description), monitors excluded."""
-    try:
-        # pactl localises its field labels ("Name:" becomes "Назва:" under a
-        # Ukrainian locale), so force a neutral locale before parsing.
-        env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
-        result = subprocess.run(
-            ["pactl", "list", "sources"],
-            capture_output=True, text=True, timeout=10, env=env,
-        )
-    except (subprocess.SubprocessError, OSError) as exc:
-        log.warning("could not list sources: %s", exc)
-        return []
-
-    devices: list[tuple[str, str]] = []
-    name = desc = ""
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if line.startswith("Name:"):
-            name = line.split(":", 1)[1].strip()
-        elif line.startswith("Description:"):
-            desc = line.split(":", 1)[1].strip()
-            if name and not name.endswith(".monitor"):
-                devices.append((name, desc or name))
-            name = desc = ""
-    return devices
+# Device enumeration is PulseAudio-specific; the backend owns the parsing.
+input_devices = backend.input_devices
 
 
 def _raw_to_wav(raw_path: Path, wav_path: Path) -> None:
@@ -361,51 +315,24 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def _active_window() -> str | None:
-    if not shutil.which("xdotool"):
-        return None
-    try:
-        out = subprocess.run(
-            ["xdotool", "getactivewindow"], capture_output=True, text=True, timeout=5
-        )
-        return out.stdout.strip() or None
-    except (subprocess.SubprocessError, OSError):
-        return None
-
-
 def deliver(text: str, cfg: Config, window: str | None = None) -> None:
-    """Put the transcript where the user asked for it."""
+    """Put the transcript where the user asked for it.
+
+    Typing is the only part that can be unavailable (Wayland forbids it), so
+    when it is asked for and impossible the text is copied instead rather than
+    silently lost -- the user still gets their words, one Ctrl+V away.
+    """
     mode = cfg["output_mode"]
+    wants_type = mode in ("type", "type_and_copy")
+    can_type = backend.TOOLS.can_type
 
-    if mode in ("copy", "type_and_copy"):
-        _copy(text)
+    # Copy when asked to, and also as the fallback when typing is impossible.
+    if mode in ("copy", "type_and_copy") or (wants_type and not can_type):
+        backend.copy_text(text)
 
-    if mode in ("type", "type_and_copy"):
+    if wants_type:
+        if not can_type:
+            raise DictationError("cannot type on this session; copied to the clipboard")
         if cfg["restore_focus"] and window:
-            subprocess.run(
-                ["xdotool", "windowactivate", "--sync", window],
-                capture_output=True, timeout=5, check=False,
-            )
-        _require("xdotool")
-        subprocess.run(
-            [
-                "xdotool", "type", "--clearmodifiers",
-                "--delay", str(cfg["type_delay_ms"]), "--", text,
-            ],
-            capture_output=True, timeout=120, check=False,
-        )
-
-
-def _copy(text: str) -> None:
-    if shutil.which("xclip"):
-        subprocess.run(
-            ["xclip", "-selection", "clipboard"],
-            input=text.encode(), capture_output=True, timeout=10, check=False,
-        )
-    elif shutil.which("xsel"):
-        subprocess.run(
-            ["xsel", "--clipboard", "--input"],
-            input=text.encode(), capture_output=True, timeout=10, check=False,
-        )
-    else:
-        log.warning("neither xclip nor xsel installed; clipboard unavailable")
+            backend.focus_window(window)
+        backend.type_text(text, delay_ms=int(cfg["type_delay_ms"]))

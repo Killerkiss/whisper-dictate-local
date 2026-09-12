@@ -10,12 +10,10 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import shutil
 import signal
-import subprocess
 import sys
-from pathlib import Path
 
+from . import backend
 from .config import Config
 from .core import (
     STATE_DIR,
@@ -36,11 +34,7 @@ def _notify(message: str, cfg: Config | None = None, level: str = "info") -> Non
     mode = str(cfg["notifications"]) if cfg is not None else "all"
     if mode == "none" or (mode == "errors" and level != "error"):
         return
-    if shutil.which("notify-send"):
-        subprocess.run(
-            ["notify-send", "-t", "2500", "-i", "audio-input-microphone", "Dictation", message],
-            check=False,
-        )
+    backend.notify("Dictation", message)
 
 
 def _tray_pid() -> int | None:
@@ -94,7 +88,13 @@ def _standalone_toggle(cfg: Config) -> int:
             _notify("Nothing recognized", cfg)
             return 0
 
-        deliver(text, cfg, None)
+        try:
+            deliver(text, cfg, None)
+        except DictationError as exc:
+            # Typing can be unavailable (Wayland); deliver() has already put the
+            # text on the clipboard, so this is a warning, not a lost transcript.
+            _notify(str(exc), cfg, level="error")
+            return 0
         return 0
 
     # Start branch.
@@ -112,6 +112,27 @@ def _standalone_toggle(cfg: Config) -> int:
     return 0
 
 
+def _check(cfg: Config) -> int:
+    """Print what this machine can actually do. The first thing to ask for in
+    a bug report, since the answer depends on the session, not the distro."""
+    for line in backend.TOOLS.describe():
+        print(line)
+
+    engine = backend.make_engine(cfg)
+    print(f"engine running: {engine.is_running()}")
+
+    if not backend.TOOLS.can_type:
+        print("\nTyping is unavailable on this session.")
+        if backend.TOOLS.session == "wayland":
+            print("Wayland forbids one client typing into another. Either set")
+            print("Result to 'Copy' in Settings, or install wtype (wlroots")
+            print("compositors) or ydotool (needs /dev/uinput access).")
+        else:
+            print("Install xdotool.")
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="uk-dictate",
@@ -119,10 +140,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--no-tray", action="store_true",
                         help="ignore a running tray app and record standalone")
+    parser.add_argument("--check", action="store_true",
+                        help="report which backend was detected, then exit")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING)
     cfg = Config.load()
+
+    if args.check:
+        return _check(cfg)
 
     if not args.no_tray:
         pid = _tray_pid()

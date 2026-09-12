@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import signal
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -25,7 +23,7 @@ except (ValueError, ImportError):  # pragma: no cover - depends on distro packag
 
 from gi.repository import GLib, Gtk, Keybinder, Notify  # noqa: E402
 
-from . import keystate, sounds  # noqa: E402
+from . import backend, keystate, sounds  # noqa: E402
 from .config import Config  # noqa: E402
 from .core import (  # noqa: E402
     STATE_DIR,
@@ -45,7 +43,6 @@ APP_ID = "uk-dictate"
 # below human reaction time and costs nothing measurable.
 POLL_RELEASE_MS = 40
 PIDFILE = STATE_DIR / "tray.pid"
-SERVICE = "whisper-server.service"
 
 # Installed into ~/.local/share/icons/hicolor/scalable/apps by install.sh.
 # The recording/busy icons are full-colour on purpose: a "-symbolic" icon gets
@@ -66,7 +63,9 @@ class TrayApp:
     def __init__(self) -> None:
         self.cfg = Config.load()
         self.recorder = Recorder()
+        self.engine = backend.make_engine(self.cfg)
         self.busy = False
+        log.info("backend -- %s", "; ".join(backend.TOOLS.describe()))
 
         Notify.init("Dictation")
         Keybinder.init()
@@ -168,8 +167,7 @@ class TrayApp:
     def quit(self) -> None:
         # Only stop what we started, so a manually started engine survives.
         if self.cfg["manage_engine"] and self._engine_started_by_us:
-            subprocess.run(["systemctl", "--user", "stop", SERVICE],
-                           check=False, capture_output=True)
+            self.engine.stop()
             log.info("speech engine stopped")
         if self._bound_key:
             try:
@@ -338,11 +336,7 @@ class TrayApp:
             log.warning("no sound file found for %r", event)
             return
 
-        for player in ("paplay", "pw-play", "aplay"):
-            if shutil.which(player):
-                _spawn([player, str(path)])
-                return
-        log.warning("no audio player available to play cues")
+        backend.play(path)
 
     def open_settings(self, *_args) -> None:
         dialog = SettingsDialog(self.cfg, on_saved=self._reload_config)
@@ -358,13 +352,12 @@ class TrayApp:
         """Bring the engine up on demand. Safe to call when already running."""
         if self._server_running():
             return  # already up; leave ownership with whoever started it
-        result = subprocess.run(["systemctl", "--user", "start", SERVICE],
-                                check=False, capture_output=True, text=True)
-        if result.returncode == 0:
+        started, message = self.engine.start()
+        if started:
             self._engine_started_by_us = True
-            log.info("speech engine started on demand")
+            log.info("%s", message)
         else:
-            log.warning("could not start speech engine: %s", result.stderr.strip())
+            log.warning("could not start speech engine: %s", message)
         GLib.idle_add(self._refresh_server_label)
 
     def _on_hotkey(self) -> None:
@@ -414,8 +407,7 @@ class TrayApp:
             and (time.monotonic() - self._last_use) > timeout_min * 60
         ):
             if self._server_running():
-                subprocess.run(["systemctl", "--user", "stop", SERVICE],
-                               check=False, capture_output=True)
+                self.engine.stop()
                 log.info("speech engine stopped after %g min idle", timeout_min)
             self._engine_started_by_us = False
             self._last_use = 0.0
@@ -423,11 +415,7 @@ class TrayApp:
         return True  # keep the timer running
 
     def _server_running(self) -> bool:
-        result = subprocess.run(
-            ["systemctl", "--user", "is-active", "--quiet", SERVICE],
-            capture_output=True, check=False,
-        )
-        return result.returncode == 0
+        return self.engine.is_running()
 
     def _refresh_server_label(self) -> bool:
         running = self._server_running()
@@ -438,8 +426,12 @@ class TrayApp:
         return True
 
     def toggle_server(self) -> None:
-        action = "stop" if self._server_running() else "start"
-        subprocess.run(["systemctl", "--user", action, SERVICE], check=False)
+        running = self._server_running()
+        action = "stop" if running else "start"
+        if running:
+            self.engine.stop()
+        else:
+            self.engine.start()
         # Starting by hand hands ownership back to the user; stopping by hand
         # means there is nothing left for us to clean up on quit.
         self._engine_started_by_us = False
@@ -475,13 +467,6 @@ def _sound_file(event: str) -> Path | None:
             if candidate.exists():
                 return candidate
     return None
-
-
-def _spawn(cmd: list[str]) -> None:
-    try:
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except OSError as exc:
-        log.warning("could not run %s: %s", cmd, exc)
 
 
 def main() -> int:

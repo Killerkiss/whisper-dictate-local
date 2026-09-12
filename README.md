@@ -81,8 +81,13 @@ by default; on stock Fedora GNOME you must install it yourself.
 Not a packaging gap; Wayland deliberately forbids one client from injecting
 input into another. On a Wayland session:
 
-- **Typing does not work.** Set *Result* to **Copy** in Settings and paste with
-  Ctrl+V. `wl-copy` is needed instead of `xclip`.
+- **The clipboard works.** Install `wl-clipboard` and it is picked up
+  automatically. Set *Result* to **Copy** and paste with Ctrl+V.
+- **Typing needs an extra tool.** Install `wtype` (wlroots compositors — Sway,
+  Hyprland) or `ydotool` (any compositor, but it writes to `/dev/uinput`, so it
+  needs a udev rule or its daemon running). If one is present it is used
+  automatically; if neither is, the transcript is copied instead of being lost
+  and the app says so.
 - **Hold-to-talk does not work** — there is no equivalent of `XQueryKeymap`.
   Use toggle mode.
 - **Focus restore does not work** and is unnecessary in copy mode.
@@ -90,18 +95,26 @@ input into another. On a Wayland session:
   `uk-dictate` command in the desktop's own keyboard settings; the CLI signals
   the running tray, so behaviour is identical to the built-in grab.
 
-Full typing support on Wayland needs `ydotool` (which needs `/dev/uinput`
-access) or `wtype` (wlroots compositors only). Neither is wired up yet.
+Run `uk-dictate --check` to see exactly what your session supports.
+
+### Without systemd
+
+Void, Devuan, Alpine and Gentoo/OpenRC are fine. With no `systemctl --user`
+available the app starts `whisper-server` itself as a child process and tracks
+it by pidfile, so the model still stays resident between dictations instead of
+being reloaded on every phrase. Set `whisper_server` in the config if the
+binary is not at `~/opt/whisper.cpp/build/bin/whisper-server`; `install.sh`
+skips the unit file, and everything else installs as usual.
 
 ### Not supported
 
-- **macOS / BSD.** `parecord`, `xdotool` and the GTK app indicator have no
-  equivalent there. macOS also needs a different audio backend and a menu bar
-  UI rather than a GTK tray.
-- **Distributions without systemd** (Void, Devuan, Alpine, Gentoo/OpenRC).
-  The app will start, but it cannot manage the speech engine as a user service
-  and silently falls back to the CLI path, which reloads the 3.5 GB model on
-  every dictation. Start `whisper-server` yourself and it behaves normally.
+- **macOS.** The audio, clipboard and typing backends have macOS branches
+  (`ffmpeg`, `pbcopy`, `osascript`), but the UI does not: the panel icon and
+  settings window are GTK with an X11 app indicator, and there is no menu bar
+  equivalent yet. The global hotkey and hold-to-talk would also need Carbon and
+  Quartz rather than Keybinder and Xlib.
+- **BSD.** Untested. X11, GTK and PulseAudio all exist in ports, so it is
+  plausible; there is no CUDA, so expect CPU-only inference.
 
 ### Dependencies by distribution
 
@@ -238,6 +251,17 @@ edited by hand. Stored in `~/.config/uk-dictate/config.json`.
   "event sounds" switch and refuses with *Sound disabled* when it is off, which
   silently disables this app's cues too. The files are played directly instead,
   with distinct sounds for start and stop.
+- **One backend module owns every OS-specific command.** `backend.py` picks the
+  tool for each job — record, type, clipboard, play, focus, engine — by probing
+  what is installed, never by checking the distribution. The rest of the app is
+  written in terms of intent, so Wayland support is a detection branch rather
+  than a fork, and `uk-dictate --check` can report the result.
+- **The clipboard copy must not capture output.** X11 and Wayland have no
+  clipboard storage: the process that ran the copy stays alive to serve the
+  selection. `xclip` forks such a child, which inherits any pipe it is given —
+  so `capture_output=True` waits for an EOF that only arrives when someone else
+  copies something, blocking each dictation for the full 10s timeout and then
+  raising. Closing stdout and stderr instead takes it from 10s to 4ms.
 - **The app owns the global hotkey.** Cinnamon's custom-shortcut manager did not
   reliably pick up bindings written via `gsettings` outside its GUI, so the tray
   grabs the key with Keybinder instead.
@@ -293,10 +317,15 @@ subtitles in its training data. Check the mic, not the settings.
 ## Troubleshooting
 
 ```bash
+uk-dictate --check                         # what this machine supports
 journalctl --user -u whisper-server -f     # engine logs
 uk-dictate --no-tray                       # bypass the tray
 systemctl --user restart whisper-server
 ```
+
+`--check` reports the detected session type and which tool was chosen for each
+job. It is the first thing to include in a bug report, because what works
+depends on the session rather than the distribution.
 
 Nothing typed? Check the clipboard — the app that had focus probably ignores
 synthetic key events.

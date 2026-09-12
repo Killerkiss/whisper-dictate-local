@@ -22,7 +22,14 @@ ln -sf "$ROOT/bin/uk-dictate-tray" "$BIN_DIR/uk-dictate-tray"
 say "launchers -> $BIN_DIR"
 
 # -- speech engine service ---------------------------------------------------
-if [ -x "$WHISPER_BIN" ] && [ -f "$MODEL" ]; then
+# Without systemd there is no unit to install: the app starts whisper-server
+# itself as a child process instead. Everything else below still applies.
+if ! command -v systemctl >/dev/null; then
+    say "no systemd; the app will start the speech engine itself"
+    if [ ! -x "$WHISPER_BIN" ]; then
+        say "WARNING: set whisper_server in the config - $WHISPER_BIN is not executable"
+    fi
+elif [ -x "$WHISPER_BIN" ] && [ -f "$MODEL" ]; then
     sed -e "s|@WHISPER_BIN@|$WHISPER_BIN|g" -e "s|@MODEL@|$MODEL|g" \
         "$ROOT/systemd/whisper-server.service.in" > "$UNIT_DIR/whisper-server.service"
     systemctl --user daemon-reload

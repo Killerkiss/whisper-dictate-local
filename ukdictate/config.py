@@ -35,6 +35,9 @@ DEFAULTS: dict[str, Any] = {
     "translate": True,
     "server_url": "http://127.0.0.1:8910/inference",
     "server_timeout_s": 120,
+    # Only used where systemd is unavailable, in which case the app starts the
+    # server itself instead of through `systemctl --user`.
+    "whisper_server": "~/opt/whisper.cpp/build/bin/whisper-server",
     # Fallback used only when the resident server is unreachable.
     "whisper_cli": "~/opt/whisper.cpp/build/bin/whisper-cli",
     "model": "~/opt/whisper.cpp/models/ggml-large-v3.bin",
