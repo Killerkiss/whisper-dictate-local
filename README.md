@@ -248,14 +248,18 @@ This step cannot be skipped by packaging: `large-v3` is 2.9 GiB, over GitHub's
 **From a package** (Debian, Ubuntu, Mint):
 
 ```bash
-sudo apt install ./whisper-dictate-local_0.2.0_all.deb
+./tools/make_deb.sh                                     # writes dist/
+sudo apt install ./dist/whisper-dictate-local_0.2.0_all.deb
 whisper-dictate-local --setup
 ```
 
+The path matters: `apt install` treats an argument without a `/` as a package
+name to look up, and answers a path that does not exist with the rather
+unhelpful `E: Unsupported file ... given on commandline`.
+
 apt resolves GTK, the app indicator, Keybinder, `xdotool`, `xclip` and
 PulseAudio for you — the part that is otherwise easy to get wrong. The package
-contains the application only; `--setup` fetches the rest. Build it yourself
-with `./tools/make_deb.sh`.
+contains the application only; `--setup` fetches the rest.
 
 **From source** (any distribution):
 
