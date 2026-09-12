@@ -100,13 +100,55 @@ class Tools:
         self.systemd = _which("systemctl")
         self.notifier = _which("notify-send")
 
+    # -- capabilities ------------------------------------------------------
+    # The settings UI asks these rather than testing for tools itself, so what
+    # the dialog offers and what the app can do cannot drift apart.
+
     @property
     def can_type(self) -> bool:
         return self.typer is not None
 
     @property
+    def can_copy(self) -> bool:
+        return self.clipboard is not None
+
+    @property
     def can_restore_focus(self) -> bool:
         return self.window is not None
+
+    @property
+    def can_grab_hotkey(self) -> bool:
+        """Keybinder grabs keys through X11. A Wayland compositor keeps its
+        shortcuts to itself, so the key has to be bound in its own settings."""
+        return self.session == "x11"
+
+    @property
+    def can_list_devices(self) -> bool:
+        return self.device_lister is not None
+
+    @property
+    def can_play(self) -> bool:
+        return self.player is not None
+
+    @property
+    def can_notify(self) -> bool:
+        return self.notifier is not None
+
+    @property
+    def can_switch_headset_profile(self) -> bool:
+        """Tagging a stream as a call is a PulseAudio/WirePlumber feature; it is
+        what makes a Bluetooth headset expose a microphone at all."""
+        return self.recorder is not None and Path(self.recorder).name == "parecord"
+
+    def why_not_type(self) -> str:
+        """One phrase explaining the lack of typing, for the settings UI."""
+        if self.can_type:
+            return ""
+        if self.session == "wayland":
+            return "Wayland does not let one app type into another; install wtype or ydotool"
+        if is_macos():
+            return "osascript is unavailable"
+        return "xdotool is not installed"
 
     def describe(self) -> list[str]:
         """Human-readable capability report, for logs and Troubleshooting."""

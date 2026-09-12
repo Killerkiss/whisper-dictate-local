@@ -3,6 +3,12 @@
 Every value in the config file is editable here; nothing requires hand-editing
 JSON. Grouped into tabs because a single column got unreadable once the audio
 and engine knobs were added.
+
+The dialog offers only what this machine can actually do. Anything the backend
+reports as unavailable is either dropped from its list of choices or greyed out
+with the reason in place of its usual hint, so the settings can never promise
+behaviour the system will not deliver -- a Wayland session, for instance, shows
+no "type it" option at all rather than accepting one that silently fails.
 """
 
 from __future__ import annotations
@@ -12,16 +18,22 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
+from . import backend  # noqa: E402
 from .config import CONFIG_PATH, Config  # noqa: E402
 
 
 def _hold_supported() -> bool:
+    """Hold-to-talk needs to see the key release, which means reading the X
+    keymap directly. No Xlib, or no X session, and only toggle is possible."""
+    if not backend.TOOLS.can_grab_hotkey:
+        return False
     try:
         from . import keystate
 
         return keystate.available()
     except Exception:  # noqa: BLE001 - the dialog must open regardless
         return False
+
 
 LANGUAGES = [
     ("auto", "Auto-detect"),
@@ -34,11 +46,18 @@ LANGUAGES = [
     ("ru", "Russian"),
 ]
 
-OUTPUT_MODES = [
-    ("type_and_copy", "Type it and copy to clipboard"),
-    ("type", "Type it into the focused window"),
-    ("copy", "Copy to clipboard only"),
+ALL_OUTPUT_MODES = [
+    ("type_and_copy", "Type it and copy to clipboard", ("type", "copy")),
+    ("type", "Type it into the focused window", ("type",)),
+    ("copy", "Copy to clipboard only", ("copy",)),
 ]
+
+
+def _output_modes() -> list[tuple[str, str]]:
+    """Only the delivery modes this machine can actually carry out."""
+    can = {"type": backend.TOOLS.can_type, "copy": backend.TOOLS.can_copy}
+    return [(code, label) for code, label, needs in ALL_OUTPUT_MODES
+            if all(can[n] for n in needs)]
 
 
 class _Page(Gtk.Grid):
@@ -49,24 +68,40 @@ class _Page(Gtk.Grid):
         self.set_border_width(18)
         self._row = 0
 
-    def add(self, label: str, widget: Gtk.Widget, hint: str = "") -> Gtk.Widget:
+    def add(self, label: str, widget: Gtk.Widget, hint: str = "",
+            unavailable: str = "") -> Gtk.Widget:
         lbl = Gtk.Label(label=label, xalign=0)
         lbl.set_valign(Gtk.Align.START)
         self.attach(lbl, 0, self._row, 1, 1)
         self.attach(widget, 1, self._row, 1, 1)
         self._row += 1
+        # The reason replaces the hint rather than joining it: advice on how to
+        # tune a setting is noise when the setting cannot take effect at all.
+        if unavailable:
+            lbl.set_sensitive(False)
+            widget.set_sensitive(False)
+            hint = f"Not available here — {unavailable}."
         if hint:
-            h = Gtk.Label(label=hint, xalign=0, wrap=True)
-            h.set_max_width_chars(50)
-            h.get_style_context().add_class("dim-label")
-            self.attach(h, 1, self._row, 1, 1)
-            self._row += 1
+            self._hint(hint, column=1)
         return widget
 
-    def add_wide(self, widget: Gtk.Widget) -> Gtk.Widget:
+    def add_wide(self, widget: Gtk.Widget, hint: str = "",
+                 unavailable: str = "") -> Gtk.Widget:
         self.attach(widget, 0, self._row, 2, 1)
         self._row += 1
+        if unavailable:
+            widget.set_sensitive(False)
+            hint = f"Not available here — {unavailable}."
+        if hint:
+            self._hint(hint, column=0, width=2)
         return widget
+
+    def _hint(self, text: str, column: int = 1, width: int = 1) -> None:
+        h = Gtk.Label(label=text, xalign=0, wrap=True)
+        h.set_max_width_chars(56 if width > 1 else 50)
+        h.get_style_context().add_class("dim-label")
+        self.attach(h, column, self._row, width, 1)
+        self._row += 1
 
 
 def _spin(value: float, lo: float, hi: float, step: float = 1, digits: int = 0) -> Gtk.SpinButton:
@@ -75,6 +110,20 @@ def _spin(value: float, lo: float, hi: float, step: float = 1, digits: int = 0) 
     sb = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=digits)
     sb.set_halign(Gtk.Align.START)
     return sb
+
+
+def _track(combo: Gtk.ComboBoxText) -> Gtk.ComboBoxText:
+    """Remember whether the user changed this combo themselves.
+
+    Needed because a filtered combo may show a substitute for a stored value
+    this machine cannot perform. Saving the substitute would quietly destroy a
+    preference that is valid on the user's other session -- dictating on a
+    Wayland login would erase the X11 choice of "type it". Connected after the
+    initial set_active_id so seeding the value does not count as a change.
+    """
+    combo.touched = False
+    combo.connect("changed", lambda *_a: setattr(combo, "touched", True))
+    return combo
 
 
 def _entry(text: str, placeholder: str = "") -> Gtk.Entry:
@@ -124,8 +173,49 @@ class SettingsDialog(Gtk.Window):
         outer.pack_start(actions, False, False, 0)
 
     # -- tabs ---------------------------------------------------------------
+    def _banner(self, page: _Page) -> None:
+        """Say once, at the top, what this session cannot do.
+
+        Without it a greyed-out row looks like a bug in the app rather than a
+        property of the session -- and the two have very different fixes.
+        """
+        tools = backend.TOOLS
+        limits = []
+        if not tools.can_type:
+            limits.append("typing into other windows")
+        if not tools.can_copy:
+            limits.append("the clipboard")
+        if not tools.can_grab_hotkey:
+            limits.append("grabbing the shortcut")
+        if not limits:
+            return
+
+        if len(limits) == 1:
+            what, verb = limits[0], "is"
+        else:
+            what = f"{', '.join(limits[:-1])} and {limits[-1]}"
+            verb = "are"
+        session = "Wayland" if tools.session == "wayland" else tools.session.title()
+
+        # A plain framed label rather than a Gtk.InfoBar: themes style even an
+        # INFO bar in their error colour (Mint-Y paints it red), which turns a
+        # statement of fact about the session into what looks like a fault.
+        label = Gtk.Label(
+            label=f"On this {session} session {what} {verb} unavailable. "
+                  f"The settings below are greyed out accordingly.",
+            xalign=0, wrap=True)
+        label.set_max_width_chars(58)
+        label.set_margin_top(4)
+        label.set_margin_bottom(4)
+        label.set_margin_start(10)
+        label.set_margin_end(10)
+        frame = Gtk.Frame()
+        frame.add(label)
+        page.add_wide(frame)
+
     def _page_general(self) -> Gtk.Widget:
         cfg, page = self.cfg, _Page()
+        self._banner(page)
 
         self.lang_combo = Gtk.ComboBoxText()
         for code, label in LANGUAGES:
@@ -144,31 +234,59 @@ class SettingsDialog(Gtk.Window):
                  "transcribe in whatever language was spoken.")
 
         self.output_combo = Gtk.ComboBoxText()
-        for code, label in OUTPUT_MODES:
+        modes = _output_modes()
+        for code, label in modes:
             self.output_combo.append(code, label)
-        self.output_combo.set_active_id(cfg["output_mode"])
-        page.add("Result", self.output_combo,
-                 "Some Electron and Java apps ignore synthetic keystrokes; "
-                 "keeping the clipboard copy gives you a fallback.")
+        available = {code for code, _ in modes}
+        # A stored mode this system cannot carry out must not stay selected, or
+        # Save would write back a setting that silently does nothing.
+        self.output_combo.set_active_id(
+            cfg["output_mode"] if cfg["output_mode"] in available
+            else (modes[0][0] if modes else None)
+        )
+        _track(self.output_combo)
+        if not modes:
+            page.add("Result", self.output_combo,
+                     unavailable="no way to type or copy was found; install "
+                                 "xdotool or xclip")
+        elif not backend.TOOLS.can_type:
+            page.add("Result", self.output_combo,
+                     f"Typing is not offered: {backend.TOOLS.why_not_type()}. "
+                     "The transcript goes to the clipboard; paste with Ctrl+V.")
+        else:
+            page.add("Result", self.output_combo,
+                     "Some Electron and Java apps ignore synthetic keystrokes; "
+                     "keeping the clipboard copy gives you a fallback.")
 
         self.hotkey_entry = _entry(cfg.get("hotkey", "F8"), "F8, <Super>space, <Ctrl><Alt>d")
-        page.add("Global shortcut", self.hotkey_entry,
-                 "GTK accelerator syntax, applied on Save. Note F8/F9 are Step "
-                 "Over and Resume in JetBrains IDEs.")
+        if backend.TOOLS.can_grab_hotkey:
+            page.add("Global shortcut", self.hotkey_entry,
+                     "GTK accelerator syntax, applied on Save. Note F8/F9 are Step "
+                     "Over and Resume in JetBrains IDEs.")
+        else:
+            page.add("Global shortcut", self.hotkey_entry,
+                     unavailable="this session keeps shortcuts to itself. Bind a "
+                                 "key to the 'uk-dictate' command in your "
+                                 "desktop's own keyboard settings instead")
 
         self.mode_combo = Gtk.ComboBoxText()
-        for code, label in (
-            ("toggle", "Press to start, press again to stop"),
-            ("hold", "Hold to talk, release to stop"),
-        ):
-            self.mode_combo.append(code, label)
-        self.mode_combo.set_active_id(str(cfg.get("hotkey_mode", "toggle")))
-        hint = ("Toggle suits long dictation; hold suits short phrases and "
-                "cannot be left recording by accident.")
-        if not _hold_supported():
-            hint += "  (Hold needs python3-xlib, which is not installed - it "
-            hint += "will fall back to toggle.)"
-        page.add("Shortcut behaviour", self.mode_combo, hint)
+        hold_ok = _hold_supported()
+        self.mode_combo.append("toggle", "Press to start, press again to stop")
+        if hold_ok:
+            self.mode_combo.append("hold", "Hold to talk, release to stop")
+        stored = str(cfg.get("hotkey_mode", "toggle"))
+        self.mode_combo.set_active_id(stored if hold_ok or stored == "toggle" else "toggle")
+        _track(self.mode_combo)
+        if hold_ok:
+            page.add("Shortcut behaviour", self.mode_combo,
+                     "Toggle suits long dictation; hold suits short phrases and "
+                     "cannot be left recording by accident.")
+        else:
+            reason = ("Wayland exposes no way to see a key release"
+                      if not backend.TOOLS.can_grab_hotkey
+                      else "hold-to-talk needs python3-xlib, which is not installed")
+            page.add("Shortcut behaviour", self.mode_combo,
+                     f"Only toggle is possible here: {reason}.")
 
         self.prompt_entry = _entry(cfg["initial_prompt"], "Angular, Firestore, Nx, ROYAL-321")
         page.add("Vocabulary hint", self.prompt_entry,
@@ -184,7 +302,9 @@ class SettingsDialog(Gtk.Window):
         self.notify_combo.set_active_id(str(cfg["notifications"]))
         page.add("Notifications", self.notify_combo,
                  "The red panel icon already shows when it is listening, so "
-                 "per-recording toasts are mostly noise.")
+                 "per-recording toasts are mostly noise.",
+                 unavailable="" if backend.TOOLS.can_notify
+                 else "notify-send is not installed")
 
         self.sound_check = Gtk.CheckButton(
             label="Play a sound when recording starts and stops")
@@ -192,18 +312,28 @@ class SettingsDialog(Gtk.Window):
             "Plays the sound files directly, so it works even with the "
             "desktop's global event sounds turned off.")
         self.sound_check.set_active(bool(cfg["play_sounds"]))
-        page.add_wide(self.sound_check)
+        no_player = "" if backend.TOOLS.can_play else "no audio player was found"
+        page.add_wide(self.sound_check, unavailable=no_player)
 
         self.lead_spin = _spin(cfg.get("sound_lead_in_ms", 600), 0, 2000, 50)
         page.add("Sound lead-in (ms)", self.lead_spin,
                  "Silence before each cue. Bluetooth headphones that have gone "
                  "idle swallow the first fraction of a second while the link "
                  "wakes up; raise this if the start cue sounds clipped. On "
-                 "wired output 0 is fine and feels snappier.")
+                 "wired output 0 is fine and feels snappier.",
+                 unavailable=no_player)
 
         self.focus_check = Gtk.CheckButton(label="Return focus to the original window before typing")
         self.focus_check.set_active(bool(cfg["restore_focus"]))
-        page.add_wide(self.focus_check)
+        # Pointless without typing, and impossible without a window manager we
+        # can address -- which is every Wayland session.
+        if not backend.TOOLS.can_type:
+            focus_why = "there is no typing to restore focus for"
+        elif not backend.TOOLS.can_restore_focus:
+            focus_why = "this session does not let an app raise another's window"
+        else:
+            focus_why = ""
+        page.add_wide(self.focus_check, unavailable=focus_why)
         return page
 
     def _page_audio(self) -> Gtk.Widget:
@@ -226,22 +356,24 @@ class SettingsDialog(Gtk.Window):
         self.device_combo.set_active_id(current)
         page.add("Microphone", self.device_combo,
                  "A Bluetooth headset only appears here while it is in "
-                 "hands-free mode; in A2DP it has no microphone at all.")
+                 "hands-free mode; in A2DP it has no microphone at all.",
+                 unavailable="" if backend.TOOLS.can_list_devices
+                 else "pactl is not installed, so the system default is used")
 
         self.headset_check = Gtk.CheckButton(
             label="Switch a Bluetooth headset to its microphone while recording")
         self.headset_check.set_active(bool(cfg["request_headset_mic"]))
-        page.add_wide(self.headset_check)
-        hint = Gtk.Label(
-            label="Marks the recording as a call so the system switches the "
-                  "headset to hands-free mode, then switches back. Costs about "
-                  "a second per dictation, and while recording your headphone "
-                  "audio drops to narrowband mono. Your laptop's own microphone "
-                  "is usually the better choice for accuracy.",
-            xalign=0, wrap=True)
-        hint.set_max_width_chars(56)
-        hint.get_style_context().add_class("dim-label")
-        page.add_wide(hint)
+        page.add_wide(
+            self.headset_check,
+            hint="Marks the recording as a call so the system switches the "
+                 "headset to hands-free mode, then switches back. Costs about "
+                 "a second per dictation, and while recording your headphone "
+                 "audio drops to narrowband mono. Your laptop's own microphone "
+                 "is usually the better choice for accuracy.",
+            unavailable="" if backend.TOOLS.can_switch_headset_profile
+            else "profile switching is a PulseAudio feature and this machine "
+                 "records with another tool",
+        )
 
         adj = Gtk.Adjustment(value=float(cfg["silence_threshold_db"]),
                              lower=-70, upper=-20, step_increment=1, page_increment=5)
@@ -273,7 +405,9 @@ class SettingsDialog(Gtk.Window):
         self.delay_spin = _spin(cfg["type_delay_ms"], 0, 60, 1)
         page.add("Typing delay (ms)", self.delay_spin,
                  "Milliseconds between simulated keystrokes. Increase if an app "
-                 "drops characters.")
+                 "drops characters.",
+                 unavailable="" if backend.TOOLS.can_type
+                 else backend.TOOLS.why_not_type())
         return page
 
     def _page_engine(self) -> Gtk.Widget:
@@ -282,7 +416,13 @@ class SettingsDialog(Gtk.Window):
         self.manage_check = Gtk.CheckButton(
             label="Start the speech engine on demand and stop it when idle")
         self.manage_check.set_active(bool(cfg.get("manage_engine", True)))
-        page.add_wide(self.manage_check)
+        engine = backend.make_engine(cfg)
+        page.add_wide(
+            self.manage_check,
+            hint="Started as a systemd user service." if engine.kind == "systemd"
+            else "No systemd here, so the engine runs as a child process of "
+                 "the tray and is tracked by pidfile.",
+        )
 
         self.idle_spin = _spin(cfg.get("engine_idle_timeout_min", 15), 0, 240, 5)
         page.add("Release VRAM after (min)", self.idle_spin,
@@ -326,9 +466,14 @@ class SettingsDialog(Gtk.Window):
         c = self.cfg
         c["language"] = self.lang_combo.get_active_id() or "auto"
         c["translate"] = self.translate_switch.get_active()
-        c["output_mode"] = self.output_combo.get_active_id() or "type_and_copy"
+        # Only written when the user actually chose it, so a stored mode this
+        # session cannot perform survives until they say otherwise. It is not
+        # honoured meanwhile: deliver() falls back and reports what it did.
+        if self.output_combo.touched and self.output_combo.get_active_id():
+            c["output_mode"] = self.output_combo.get_active_id()
         c["hotkey"] = self.hotkey_entry.get_text().strip()
-        c["hotkey_mode"] = self.mode_combo.get_active_id() or "toggle"
+        if self.mode_combo.touched and self.mode_combo.get_active_id():
+            c["hotkey_mode"] = self.mode_combo.get_active_id()
         c["initial_prompt"] = self.prompt_entry.get_text().strip()
         c["notifications"] = self.notify_combo.get_active_id() or "errors"
         c["play_sounds"] = self.sound_check.get_active()

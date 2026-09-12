@@ -199,6 +199,18 @@ Right-click the panel icon → **Settings**. Every option lives in the UI across
 four tabs — General, Audio, Engine, Advanced — and nothing needs the JSON to be
 edited by hand. Stored in `~/.config/uk-dictate/config.json`.
 
+**The dialog only offers what your system can do.** Choices that cannot work
+are dropped from their list rather than shown and ignored — on Wayland there is
+no "type it" option at all, and no hold-to-talk without Xlib — and settings
+that depend on a missing tool are greyed out with the reason in place of their
+usual hint. A banner names the limitation once at the top, so a greyed row
+reads as a property of the session rather than a fault in the app.
+
+A preference your *current* session cannot carry out is greyed out but kept:
+opening Settings on a Wayland login will not erase the "type it" choice you
+made on X11. It simply is not honoured until you are back on a session that
+supports it.
+
 | Setting | Notes |
 |---|---|
 | Spoken language | `uk` by default. `auto` handles mixed speech but is less reliable on short clips. |
@@ -251,6 +263,12 @@ edited by hand. Stored in `~/.config/uk-dictate/config.json`.
   "event sounds" switch and refuses with *Sound disabled* when it is off, which
   silently disables this app's cues too. The files are played directly instead,
   with distinct sounds for start and stop.
+- **The settings dialog asks the backend what is possible.** It never probes
+  for tools itself, so what the UI offers and what the app can do cannot drift
+  apart — a capability added to `backend.py` reaches the dialog for free. Modes
+  that cannot work are removed rather than disabled, because a disabled choice
+  still invites the question "why can I not pick that?", while its absence
+  plus one line of explanation does not.
 - **One backend module owns every OS-specific command.** `backend.py` picks the
   tool for each job — record, type, clipboard, play, focus, engine — by probing
   what is installed, never by checking the distribution. The rest of the app is
@@ -327,8 +345,13 @@ systemctl --user restart whisper-server
 job. It is the first thing to include in a bug report, because what works
 depends on the session rather than the distribution.
 
-Nothing typed? Check the clipboard — the app that had focus probably ignores
-synthetic key events.
+Nothing typed? Run `uk-dictate --check` first — on a Wayland session typing is
+impossible and the text goes to the clipboard instead. On X11 with `xdotool`
+present, the likely cause is an Electron or Java window ignoring synthetic key
+events; the clipboard copy is the fallback.
+
+(Before the backend rewrite this symptom had a third cause: the clipboard copy
+blocked for 10s and then threw, so typing never ran at all. That is fixed.)
 
 VRAM needed elsewhere? The engine releases it automatically after the idle
 timeout (Settings -> *Release VRAM after*), or stop it now from the tray menu.
