@@ -27,8 +27,8 @@ bar front end that has not yet been run on a Mac — see
 |---|---|
 | [How it works](#how-it-works) | the pipeline, and the two shortcut behaviours |
 | [Compatibility](#compatibility) | which distributions and sessions this runs on |
-| [Requirements](#requirements) | packages, and building whisper.cpp with CUDA |
-| [Install](#install) | one script |
+| [Requirements](#requirements) | models, and building whisper.cpp for your GPU (or none) |
+| [Install](#install) | step by step for Linux, macOS and BSD |
 | [Panel icon](#panel-icon) | what each colour means |
 | [Settings](#settings) | every option, with screenshots |
 | [Getting good results](#getting-good-results) | mic levels, Bluetooth headsets, hallucinations |
@@ -150,32 +150,7 @@ systemd to hand it to.
 and its logic is covered by tests on Linux, but every Cocoa and Quartz call is
 unverified. Treat it as a first draft and please report what breaks.
 
-```bash
-brew install ffmpeg
-git clone https://github.com/ggml-org/whisper.cpp ~/opt/whisper.cpp
-cd ~/opt/whisper.cpp && cmake -B build && cmake --build build -j
-# Metal is on by default on Apple Silicon; no CUDA toolchain needed.
-curl -L -o models/ggml-large-v3.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
-
-pip install 'whisper-dictate-local[macos] @ git+https://github.com/Killerkiss/whisper-dictate-local'
-./install.sh
-```
-
-macOS will ask for **Microphone** access on the first dictation. Typing and the
-global shortcut additionally need **Accessibility** (System Settings → Privacy
-& Security → Accessibility), and macOS will not prompt for an unsigned
-interpreter — add your terminal or the Python binary by hand.
-
-Without Accessibility the app still works: set *Result* to **Copy to
-clipboard** and bind a key to the `whisper-dictate-local` command in Raycast,
-Hammerspoon, Karabiner or an Automator Quick Action. The CLI signals the
-running menu bar app, so behaviour is identical to the built-in shortcut —
-the same arrangement Wayland users have with their compositor.
-
-Settings on macOS are menu items rather than a dialog: language, translate and
-result are toggles in the menu, and **Edit settings file…** opens the JSON for
-everything else.
+See [Install → macOS](#macos) for the steps and the permissions it needs.
 
 ### BSD — should work, untested
 
@@ -183,9 +158,158 @@ X11, GTK3, PyGObject, PulseAudio, `xdotool` and `xclip` are all in ports, and
 the lack of systemd is already handled. Expect CPU-only inference; there is no
 CUDA. If you try it, a report either way is welcome.
 
+See [Install → BSD](#bsd) for the steps.
+
+## Requirements
+
+Three things, whatever you run:
+
+- **Python 3.9 or newer.** `requests` is its only dependency, and there is
+  nothing to compile.
+- **whisper.cpp, built for your own hardware.** An NVIDIA card is *not*
+  required — see the accelerator table below.
+- **A GGML model**, `large-v3` unless you are short of memory.
+
+Everything else is an ordinary command — something to record audio, something
+to deliver the text — and differs per platform. `whisper-dictate-local --check`
+reports what it found on your machine and what is missing.
+
+### Choosing a model
+
+whisper.cpp ships a download script that knows every name:
+
+```bash
+cd ~/opt/whisper.cpp
+./models/download-ggml-model.sh large-v3
+```
+
+| model | disk | memory | pick it when |
+|---|---|---|---|
+| `tiny` | 75 MiB | ~273 MB | checking the plumbing works |
+| `base` | 142 MiB | ~388 MB | CPU-only, and you mostly dictate short phrases |
+| `small` | 466 MiB | ~852 MB | CPU-only, and you want usable quality |
+| `medium` | 1.5 GiB | ~2.1 GB | a 4 GB card |
+| `large-v3` | 2.9 GiB | ~3.9 GB | **the default**, and what the settings assume |
+
+Sizes are whisper.cpp's own figures. Two things worth knowing:
+
+- **Do not use `large-v3-turbo` if you translate.** It is faster, but it was
+  trained for transcription only and translates noticeably worse.
+- Quantised builds — `large-v3-q5_0` and friends — roughly halve the memory
+  for a small accuracy cost, and are how you run a large model on a small card.
+
+### Building whisper.cpp
+
+```bash
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp ~/opt/whisper.cpp
+cd ~/opt/whisper.cpp
+```
+
+Then configure for whatever hardware you actually have. Pick one row:
+
+| hardware | configure with |
+|---|---|
+| Apple Silicon | *nothing — Metal is on by default* |
+| NVIDIA | `-DGGML_CUDA=1` |
+| AMD, ROCm | `-DGGML_HIP=ON` |
+| AMD / Intel / NVIDIA, via Vulkan | `-DGGML_VULKAN=1` |
+| Intel, oneAPI | `-DGGML_SYCL=ON` |
+| CPU only | *nothing; `-DGGML_BLAS=ON` against OpenBLAS is faster* |
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release   # plus the flag from the table
+cmake --build build -j
+```
+
+**Vulkan is the easy answer for a non-NVIDIA GPU**: one driver package, no
+vendor toolchain, and the same flag covers AMD and Intel. CPU-only works
+perfectly well with `small`; `large-v3` on a CPU is slow enough to spoil
+dictation, so drop to a smaller model rather than waiting.
+
+## Install
+
+### Linux
+
+```bash
+# 1. system packages -- Debian/Ubuntu/Mint shown; see "Dependencies by
+#    distribution" below for Fedora, Arch and openSUSE
+sudo apt install python3-gi python3-requests python3-xlib \
+    gir1.2-ayatanaappindicator3-0.1 gir1.2-keybinder-3.0 \
+    pulseaudio-utils xdotool xclip cmake build-essential
+
+# 2. whisper.cpp -- NVIDIA shown; use the accelerator table above for anything
+#    else, or drop the CUDA flags entirely for a CPU build
+sudo apt install nvidia-cuda-toolkit
+cd ~/opt/whisper.cpp
+# CUDA 12.0 (Ubuntu 24.04) will not accept gcc-13, hence the host compiler pin.
+# CMAKE_CUDA_ARCHITECTURES: 89 = RTX 40xx, 86 = RTX 30xx.
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=1 \
+      -DCMAKE_CUDA_ARCHITECTURES=89 \
+      -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12
+cmake --build build -j"$(nproc)"
+
+# 3. the app
+pipx install git+https://github.com/Killerkiss/whisper-dictate-local
+./install.sh          # DICTATE_KEY=F8 ./install.sh to pick another shortcut
+whisper-dictate-local-tray &
+```
+
+On a **Wayland** session, swap `xclip` for `wl-clipboard`, and add `wtype`
+(wlroots compositors) or `ydotool` if you want typing rather than clipboard
+output. See [Wayland — partially](#wayland--partially).
+
+### macOS
+
+Never yet run on a Mac — see [Compatibility](#macos--needs-testing) before you
+rely on it.
+
+```bash
+brew install ffmpeg cmake
+
+# whisper.cpp -- Metal is on by default, so there is no toolchain to install
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp ~/opt/whisper.cpp
+cd ~/opt/whisper.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./models/download-ggml-model.sh large-v3
+
+pip install 'whisper-dictate-local[macos] @ git+https://github.com/Killerkiss/whisper-dictate-local'
+./install.sh
+```
+
+macOS asks for **Microphone** access on the first dictation. Typing and the
+global shortcut additionally need **Accessibility** (System Settings → Privacy
+& Security → Accessibility), and macOS will not prompt an unsigned interpreter
+usefully — add your terminal, or the Python binary, by hand.
+
+Without Accessibility it still works: set *Result* to **Copy to clipboard** and
+bind a key to the `whisper-dictate-local` command in Raycast, Hammerspoon,
+Karabiner or an Automator Quick Action. The CLI signals the running menu bar
+app, so behaviour is identical to a built-in shortcut — the same arrangement
+Wayland users have with their compositor.
+
+Settings are menu items rather than a dialog: language, translate and result
+are toggles in the menu, and **Edit settings file…** opens the JSON for the
+rest.
+
+### BSD
+
+Untested, but nothing in the way — see
+[Compatibility](#bsd--should-work-untested). There is no CUDA, so build for CPU
+or Vulkan.
+
 ```sh
 # FreeBSD
-pkg install python3 py39-gobject3 py39-requests pulseaudio xdotool xclip bash
+pkg install python3 py39-gobject3 py39-requests pulseaudio xdotool xclip \
+    bash cmake
+
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp ~/opt/whisper.cpp
+cd ~/opt/whisper.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release   # add -DGGML_VULKAN=1 if you have it
+cmake --build build -j
+
+pip install git+https://github.com/Killerkiss/whisper-dictate-local
+./install.sh
 ```
 
 ### Dependencies by distribution
@@ -218,66 +342,11 @@ sudo zypper install python3-gobject python3-requests python3-xlib \
 `python3-xlib` is only needed for hold-to-talk; without it the app stays in
 toggle mode and says so. On Wayland, swap `xclip` for `wl-clipboard`.
 
-## Requirements
 
-Everything except whisper.cpp is present on a stock Mint 22 install; see
-[Dependencies by distribution](#dependencies-by-distribution) for other systems.
+### What `install.sh` does
 
-- GTK 3 with `python3-gi`, an app indicator library, and Keybinder
-- `python3-xlib` (only for hold-to-talk)
-- `pulseaudio-utils` (`parecord`), `xdotool`, `xclip`
-- whisper.cpp built with CUDA, plus a GGML model
-
-### Building whisper.cpp
-
-```bash
-sudo apt install cmake nvidia-cuda-toolkit build-essential
-git clone --depth 1 https://github.com/ggml-org/whisper.cpp ~/opt/whisper.cpp
-cd ~/opt/whisper.cpp
-# CUDA 12.0 (Ubuntu 24.04) will not accept gcc-13, hence the host compiler pin.
-# Set CMAKE_CUDA_ARCHITECTURES to your GPU: 89 = RTX 40xx, 86 = RTX 30xx.
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=1 \
-      -DCMAKE_CUDA_ARCHITECTURES=89 \
-      -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12
-cmake --build build -j"$(nproc)"
-curl -L -o models/ggml-large-v3.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
-```
-
-Use **large-v3**, not large-v3-turbo. Turbo is faster but was trained for
-transcription only, and its translation quality is noticeably worse.
-
-## Install
-
-Two halves: the Python package, and the desktop integration.
-
-### The package
-
-```bash
-pipx install git+https://github.com/Killerkiss/whisper-dictate-local
-# or, for the macOS menu bar:
-pip install 'whisper-dictate-local[macos] @ git+https://github.com/Killerkiss/whisper-dictate-local'
-```
-
-Only `requests` is pulled in. Everything else the app uses is either the
-standard library or an external command it looks for at run time, so there is
-no compiler involved and this works on any Unix.
-
-**The GTK tray is deliberately not a Python dependency.** PyGObject and the app
-indicator typelibs cannot be installed reliably from PyPI — they need GTK
-headers and matching introspection data — so they come from your system package
-manager instead; see [Dependencies by
-distribution](#dependencies-by-distribution). The command-line half works
-without them, and `whisper-dictate-local-tray` prints what is missing.
-
-### Desktop integration
-
-```bash
-./install.sh          # DICTATE_KEY=F8 ./install.sh to pick another shortcut
-whisper-dictate-local-tray &
-```
-
-The script branches on what the system is, not on what it is called:
+The Python package gives you the two commands; `install.sh` wires them into the
+desktop. It branches on what the system is, not on what it is called:
 
 | | Linux / BSD | macOS |
 |---|---|---|
@@ -285,10 +354,16 @@ The script branches on what the system is, not on what it is called:
 | autostart | `.desktop` in `~/.config/autostart` | LaunchAgent in `~/Library/LaunchAgents` |
 | icons | hicolor theme, plus a launcher icon | none — the menu bar uses text |
 | speech engine | systemd user service | child process, tracked by pidfile |
-| shortcut | bound via Cinnamon's `gsettings` if present | bound by you, see [macOS](#macos--needs-testing) |
+| shortcut | bound via Cinnamon's `gsettings` if present | bound by you, see [macOS](#macos) |
 
-It is safe to re-run, and it removes the leftovers of the old `uk-dictate`
+It is safe to re-run, and it clears out the leftovers of the old `uk-dictate`
 install if it finds any.
+
+**The GTK tray is deliberately not a Python dependency.** PyGObject and the app
+indicator typelibs cannot be installed reliably from PyPI — they need GTK
+headers and matching introspection data — so they come from the system package
+manager instead. The command-line half works without them, and
+`whisper-dictate-local-tray` prints what is missing.
 
 ## Panel icon
 
