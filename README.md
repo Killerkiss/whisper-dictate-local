@@ -31,7 +31,7 @@ bar front end that has not yet been run on a Mac — see
 | [Requirements](#requirements) | models, and building whisper.cpp for your GPU (or none) |
 | [Install](#install) | step by step for Linux, macOS and BSD |
 | [Panel icon](#panel-icon) | what each colour means |
-| [Settings](#settings) | every option, with screenshots |
+| [Settings](#settings) | every option on every tab, with screenshots |
 | [Getting good results](#getting-good-results) | mic levels, Bluetooth headsets, hallucinations |
 | [Troubleshooting](#troubleshooting) | when nothing is typed |
 | [Design notes](#design-notes) | why it is built the way it is |
@@ -468,18 +468,61 @@ are greyed out with the reason:
 
 ![The General tab on Wayland: a banner explains the session's limits, the Result list contains only the clipboard option, and the shortcut, hold-to-talk and focus settings are greyed out](docs/screenshots/settings-wayland.png)
 
-| Setting | Notes |
-|---|---|
-| Spoken language | `uk` by default. `auto` handles mixed speech but is less reliable on short clips. |
-| Translate to English | On: English out, whatever you speak. Off: the text comes out in the language you spoke. Whisper's translate task only ever targets English - other target languages would need a separate translation step. |
-| Result | Type it, copy it, or both. Some Electron/Java apps ignore synthetic keystrokes — the clipboard copy is the fallback. |
-| Global shortcut | GTK accelerator syntax (`F8`, `<Super>space`). The app grabs it itself via Keybinder rather than relying on the desktop's shortcut manager. |
-| Shortcut behaviour | Toggle, or hold-to-talk. |
-| Pause media while recording | Pauses any running player over MPRIS and resumes it afterwards. Off by default. |
-| Silence cutoff | A clip must clear this peak level *and* show at least 8 dB between peak and noise floor. **Do not disable**: fed silence, Whisper invents fluent sentences. |
-| Typing delay | Raise if an app drops characters. |
-| Vocabulary hint | Bias text for names and jargon Whisper mangles. |
-| Notifications | `none` / `errors` / `all`. Defaults to `errors`: the red panel icon already shows when it is listening, so a toast per recording is just noise. |
+### General
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Spoken language** | Ukrainian | The language Whisper is told to expect. `Auto-detect` copes with switching between languages mid-sentence but is less reliable on very short clips, because it has less audio to judge from. The list is a shortlist — any language code Whisper knows can be set by hand in the config file. |
+| **Translate to English** | on | On, you get English whatever you speak. Off, the text comes out in the language you spoke. This is Whisper's own translate task, and **English is the only target it has** — translating into anything else would need a separate step this app does not do. |
+| **Result** | Type it and copy | Where the transcript goes. *Type* sends synthetic keystrokes to whatever had focus; *Copy* puts it on the clipboard; the default does both. Keep the copy: some Electron and Java apps ignore synthetic keystrokes entirely, and then the clipboard is your only way to get the text. |
+| **Global shortcut** | `F8` | GTK accelerator syntax — `F8`, `<Super>space`, `<Ctrl><Alt>d`. Applied when you press Save. On X11 the app grabs the key itself rather than trusting the desktop's shortcut manager, which proved unreliable at noticing bindings written outside its own GUI. |
+| **Shortcut behaviour** | Toggle | *Toggle* starts on one press and stops on the next — better for long dictation, since you are not holding a key while you think. *Hold to talk* records only while the key is down, which suits short phrases and cannot be left recording by accident. Hold needs X11 and `python3-xlib`; where those are missing the option is not offered. |
+| **Vocabulary hint** | empty | Text shown to Whisper before it transcribes, biasing it towards words it keeps getting wrong — product names, jargon, ticket prefixes. A short comma-separated list is enough; it is a nudge, not a dictionary. |
+| **Notifications** | Errors only | `None`, `Errors only` or `Every state change`. The default is deliberate: the panel icon already turns red while listening, so a toast per recording is noise, but a failure you cannot see is worth interrupting for. |
+| **Play a sound when recording starts and stops** | on | Short rising and falling tones so you know the state without looking at the panel. Played directly rather than through libcanberra, which honours the desktop's global "event sounds" switch and would silence these too. |
+| **Sound lead-in (ms)** | 600 | Silence prepended to each cue. A Bluetooth sink that has gone idle takes a few hundred milliseconds to wake and swallows whatever plays during that window — which silently ate the entire start cue. Raise it if the start tone sounds clipped; on wired output `0` is fine and feels snappier. |
+| **Return focus to the original window before typing** | on | The focused window is remembered when recording starts and re-activated before typing, so opening the tray menu does not send your text to the panel. X11 only — Wayland exposes no way for one app to raise another's window. |
+
+### Audio
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Microphone** | System default | Which capture device to record from. A Bluetooth headset only appears here while it is in hands-free mode; in A2DP it has no microphone at all. A device that is not connected right now stays selectable, so unplugging a headset does not silently reset your choice. |
+| **Switch a Bluetooth headset to its microphone while recording** | off | Moves the headset to HSP/HFP for the recording and back afterwards, which is the only way it offers a microphone. Costs about 0.1s each way, and while recording whatever you are listening to drops to narrowband mono. Your laptop's own microphone is usually better for accuracy. |
+| **Pause music and video while recording** | off | Pauses every media player that is actually playing, over MPRIS, and resumes those same players afterwards — anything you had already paused stays paused. Worth turning on: audio leaking from headphones into the microphone is the easiest way to make Whisper invent text. |
+| **Speech peak cutoff (dB)** | −42 | The loudest moment of a clip must reach this level or the clip is discarded unheard. **This guard matters**: handed silence, Whisper does not return nothing, it invents fluent sentences. Lower it if quiet speech is being dropped; raise it in a noisy room. |
+| **Minimum speech spread (dB)** | 8 | The required gap between the loudest moment and the noise floor. Rejects steady background hum, which has a high level but no dynamics, and survives changes in microphone gain that an absolute threshold does not. |
+| **Capture latency (ms)** | 20 | How small a buffer to ask PulseAudio for. Its default buffering takes about two seconds to deliver the first sample and silently loses the first second of speech; at 20ms capture is live in roughly 50ms. Raise it only if audio drops out under heavy load. |
+| **Maximum recording (s)** | 300 | A safety net, so a session you forgot about cannot record forever. |
+| **Typing delay (ms)** | 8 | Milliseconds between simulated keystrokes. Raise it if an application drops characters — some handle a fast synthetic burst badly. |
+
+### Engine
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Start the speech engine on demand and stop it when idle** | on | The model costs about 3.5 GB of VRAM. With this on, the engine starts at your first dictation and shuts down once idle, so a laptop GPU is not holding it all day. The price is roughly four seconds on the first phrase after an idle gap. |
+| **Release VRAM after (min)** | 15 | How long the engine may sit unused before being stopped. `0` keeps it loaded permanently. |
+| **Server URL** | `http://127.0.0.1:8910/inference` | Where the resident whisper.cpp server listens. If it is unreachable the app falls back to the command-line path, which is much slower because it reloads the model every time. |
+| **Server timeout (s)** | 120 | How long to wait for a transcription before giving up. Long clips on a slow machine need more. |
+
+### Advanced
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Model file** | `~/opt/whisper.cpp/models/ggml-large-v3.bin` | The GGML model to load. See [Choosing a model](#choosing-a-model); `--setup` sets this for you. |
+| **whisper-cli path** | `~/opt/whisper.cpp/build/bin/whisper-cli` | Used only when the server is unreachable. |
+| **Fallback CPU threads** | 4 | Caps the CPU use of that fallback path so it does not disturb other work. The GPU does the real work anyway. |
+
+The tab also shows the path to the config file, which you can select and copy.
+
+### Not in the dialog
+
+One setting lives only in the config file, because it matters on a minority of
+systems and `--setup` fills it in:
+
+| Key | Default | What it does |
+|---|---|---|
+| `whisper_server` | `~/opt/whisper.cpp/build/bin/whisper-server` | Path to the server binary. Used where there is no systemd unit to start it — macOS, BSD, musl distributions, and packaged installs — in which case the app runs it as a tracked child process instead. |
 
 ## Design notes
 
