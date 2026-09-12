@@ -83,6 +83,11 @@ class MenuBarApp(rumps.App):
         self._write_pidfile()
 
         signal.signal(signal.SIGUSR1, self._on_signal)
+        # Same reasoning as the GTK tray: a killed app must not leave its
+        # recorder child holding the microphone.
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(sig, lambda *_a: self._main_thread_work.put(
+                lambda: self.on_quit(None)))
         rumps.Timer(self._tick, TICK_S).start()
         rumps.Timer(self._check_idle, 60).start()
         self._bind_hotkey()

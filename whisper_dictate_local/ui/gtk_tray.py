@@ -123,6 +123,10 @@ class TrayApp:
         # The global hotkey delivers SIGUSR1 rather than starting a second copy.
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, self._on_signal)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda *_: self.quit())
+        # Ctrl-C when run from a terminal. Without it the interpreter dies on
+        # KeyboardInterrupt and parecord, being a child process rather than a
+        # thread, outlives it holding the microphone open.
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, lambda *_: self.quit())
         # SIGHUP re-reads the config file, so edits made outside the settings
         # dialog take effect without restarting the tray.
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGHUP, self._on_reload)
