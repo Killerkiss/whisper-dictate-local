@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
-  <!-- Transcribing: amber, so the three states are distinguishable at a glance. -->
+  <!-- Transcribing: three dots, the usual "working on it" glyph. Distinct in
+       shape from both the idle microphone and the recording circle, so the
+       state is readable at a glance without relying on colour.
+
+       Amber rather than the panel foreground, so a glance distinguishes
+       "still working" from "listening" by colour as well as shape. -->
   <g fill="#e5a50a">
-    <path d="M11 3a2.75 2.75 0 0 0-2.75 2.75v5a2.75 2.75 0 0 0 5.5 0v-5A2.75 2.75 0 0 0 11 3z"/>
-    <path d="M5.75 9.5a.75.75 0 0 0-.75.75v.5a6 6 0 0 0 5.25 5.953V18H8.5a.75.75 0 0 0 0 1.5h5a.75.75 0 0 0 0-1.5h-1.75v-1.297A6 6 0 0 0 17 10.75v-.5a.75.75 0 0 0-1.5 0v.5a4.5 4.5 0 0 1-9 0v-.5a.75.75 0 0 0-.75-.75z"/>
+    <circle cx="4.5" cy="11" r="2.1"/>
+    <circle cx="11"  cy="11" r="2.1"/>
+    <circle cx="17.5" cy="11" r="2.1"/>
   </g>
 </svg>

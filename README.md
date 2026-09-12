@@ -298,8 +298,15 @@ icon is separate and changes with state:
 | state | icon |
 |---|---|
 | idle | microphone, themed to match the panel |
-| recording | **red** microphone |
-| transcribing | amber microphone |
+| recording | **red circle** |
+| transcribing | three **amber dots** |
+
+The three states differ in shape first and colour second. At 16–22px a tinted
+microphone is hard to tell from an untinted one at a glance, and impossible for
+anyone with a red/green deficiency; a circle and a row of dots are legible
+either way. The recording and transcribing icons are full-colour on purpose —
+a `-symbolic` icon gets recoloured to the panel foreground, which would throw
+the red away.
 
 ## Settings
 

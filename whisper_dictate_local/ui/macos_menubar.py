@@ -54,7 +54,7 @@ PIDFILE = STATE_DIR / "tray.pid"
 # The menu bar has no equivalent of a themed icon, and a template PNG would
 # have to be generated and shipped for every state. Emoji read correctly in
 # both light and dark menu bars and need no assets.
-TITLES = {"idle": "🎙", "recording": "🔴", "busy": "⏳"}
+TITLES = {"idle": "🎙", "recording": "🔴", "busy": "•••"}
 
 # How often the main thread wakes to apply queued work. Python signal handlers
 # only run when the interpreter executes bytecode, and the Cocoa run loop does
