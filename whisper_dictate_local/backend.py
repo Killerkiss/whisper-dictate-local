@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -139,9 +140,12 @@ class Tools:
 
     @property
     def can_switch_headset_profile(self) -> bool:
-        """Tagging a stream as a call is a PulseAudio/WirePlumber feature; it is
-        what makes a Bluetooth headset expose a microphone at all."""
-        return self.recorder is not None and Path(self.recorder).name == "parecord"
+        """Needs pactl to change the card profile and parecord to capture from
+        it. A headset in A2DP has no microphone at all, so this is what makes
+        one usable rather than a mere quality setting."""
+        return (self.device_lister is not None
+                and self.recorder is not None
+                and Path(self.recorder).name == "parecord")
 
     def why_not_type(self) -> str:
         """One phrase explaining the lack of typing, for the settings UI."""
@@ -303,6 +307,181 @@ def play(path: Path) -> None:
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as exc:
         log.warning("could not play %s: %s", path, exc)
+
+
+# -- bluetooth headset profile ------------------------------------------------
+
+# A2DP is output-only: a headset in it exposes no microphone at all. HSP/HFP
+# does, at narrowband mono quality. Preference order is best codec first.
+HEADSET_PROFILES = ("headset-head-unit-msbc", "headset-head-unit-cvsd",
+                    "headset-head-unit")
+
+
+def _pactl(*args: str) -> str:
+    if TOOLS.device_lister is None:
+        return ""
+    try:
+        env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
+        r = subprocess.run([TOOLS.device_lister, *args], capture_output=True,
+                           text=True, timeout=15, env=env)
+        return r.stdout if r.returncode == 0 else ""
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("pactl %s failed: %s", " ".join(args), exc)
+        return ""
+
+
+def bluetooth_card() -> str | None:
+    """Name of a connected Bluetooth audio card, if there is one."""
+    for line in _pactl("list", "cards", "short").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].startswith("bluez_card."):
+            return parts[1]
+    return None
+
+
+def _card_state(card: str) -> tuple[str, set[str]]:
+    """(active profile, profiles the card offers right now)."""
+    active, available = "", set()
+    in_card = False
+    for line in _pactl("list", "cards").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Name: "):
+            in_card = stripped.split(": ", 1)[1] == card
+        if not in_card:
+            continue
+        if stripped.startswith("Active Profile: "):
+            active = stripped.split(": ", 1)[1]
+        # Profile lines look like "headset-head-unit-msbc: Headset (...)".
+        match = re.match(r"^([a-z0-9+_-]+): .*available: yes", stripped)
+        if match:
+            available.add(match.group(1))
+    return active, available
+
+
+class HeadsetSwitch:
+    """Put a Bluetooth headset into hands-free mode around a recording.
+
+    WirePlumber is supposed to do this itself when a stream declares
+    media.role=Communication, and the recorder still sets that property. But
+    the policy is off by default on some builds -- Ubuntu 24.04's WirePlumber
+    0.4.17 ships an empty bluez rule set -- and even switched on it did not
+    engage on the hardware this was tested against. Doing it explicitly is a
+    few lines and works the same everywhere.
+    """
+
+    def __init__(self) -> None:
+        self.card: str | None = None
+        self.previous: str | None = None
+
+    def engage(self) -> str | None:
+        """Switch to HSP/HFP. Returns the source to record from, or None.
+
+        None means "carry on with the normal input" -- no headset, already in
+        hands-free, or the switch failed. It is never an error: a missing
+        headset should cost the user a worse microphone, not a lost recording.
+        """
+        card = bluetooth_card()
+        if card is None:
+            return None
+
+        active, available = _card_state(card)
+        if active.startswith("headset-head-unit"):
+            return self._await_source()  # already there; nothing to restore
+
+        target = next((p for p in HEADSET_PROFILES if p in available), None)
+        if target is None:
+            log.info("%s offers no hands-free profile", card)
+            return None
+
+        if not _pactl_set_profile(card, target):
+            return None
+        self.card, self.previous = card, active
+        log.info("bluetooth: %s -> %s", active, target)
+        return self._await_source()
+
+    def _await_source(self, timeout_s: float = 5.0) -> str | None:
+        """Wait for the headset's capture source to become usable.
+
+        Existence is not enough. For the first second or so after the profile
+        change the node is listed with a state of "(null)" -- present, but not
+        yet set up -- and recording from it then yields a silent, empty file
+        with no error from parecord at all. Waiting for a real state is the
+        difference between this working and failing silently.
+        """
+        deadline = time.monotonic() + timeout_s
+        seen = None
+        while time.monotonic() < deadline:
+            for line in _pactl("list", "sources", "short").splitlines():
+                parts = line.split()
+                if len(parts) < 3 or not parts[1].startswith("bluez_input."):
+                    continue
+                seen = parts[1]
+                if parts[-1].upper() in ("IDLE", "SUSPENDED", "RUNNING"):
+                    return parts[1]
+            time.sleep(0.1)
+        if seen:
+            log.warning("bluetooth source %s never became ready", seen)
+        else:
+            log.warning("no bluetooth capture source appeared")
+        return None
+
+    def restore(self) -> None:
+        """Put the previous profile back, so music sounds right again."""
+        if self.card is None or self.previous is None:
+            return
+        target = self.previous
+        if target == "off" or target.startswith("headset-head-unit"):
+            # A card caught mid-connection reports "off". Restoring that would
+            # switch the headset off entirely -- worse than where we started --
+            # so fall back to the best output profile it offers.
+            _active, available = _card_state(self.card)
+            target = _best_output_profile(available) or ""
+            if not target:
+                log.info("bluetooth: nothing sensible to restore to; leaving as is")
+                self.card = self.previous = None
+                return
+        # Verify rather than assume. A restore that silently fails leaves the
+        # headset in narrowband mono for the rest of the session, which is the
+        # worst outcome here -- worse than never having switched at all.
+        card = self.card
+        self.card = self.previous = None
+        for attempt in (1, 2):
+            _pactl_set_profile(card, target)
+            active, _ = _card_state(card)
+            if active == target:
+                log.info("bluetooth: restored %s", target)
+                return
+            if attempt == 1:
+                time.sleep(0.5)
+        log.warning("bluetooth: could not restore %s (still %s); "
+                    "set it back in your sound settings", target, active)
+
+
+# Best first: SBC-XQ beats plain SBC, and both beat anything non-A2DP.
+OUTPUT_PROFILES = ("a2dp-sink-sbc_xq", "a2dp-sink-aptx_hd", "a2dp-sink-aptx",
+                   "a2dp-sink-aac", "a2dp-sink-sbc", "a2dp-sink")
+
+
+def _best_output_profile(available: set[str]) -> str | None:
+    for profile in OUTPUT_PROFILES:
+        if profile in available:
+            return profile
+    return next((p for p in sorted(available) if p.startswith("a2dp")), None)
+
+
+def _pactl_set_profile(card: str, profile: str) -> bool:
+    if TOOLS.device_lister is None:
+        return False
+    try:
+        r = subprocess.run([TOOLS.device_lister, "set-card-profile", card, profile],
+                           capture_output=True, text=True, timeout=15)
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("could not set %s to %s: %s", card, profile, exc)
+        return False
+    if r.returncode != 0:
+        log.warning("could not set %s to %s: %s", card, profile, r.stderr.strip())
+        return False
+    return True
 
 
 # -- text output -------------------------------------------------------------

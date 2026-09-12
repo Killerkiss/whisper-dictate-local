@@ -42,6 +42,7 @@ class Recorder:
         self.wav_path = STATE_DIR / "rec.wav"
         self._proc: subprocess.Popen | None = None
         self.source_window: str | None = None
+        self._headset = backend.HeadsetSwitch()
 
     @property
     def active(self) -> bool:
@@ -63,6 +64,14 @@ class Recorder:
         # to the panel, so without this the transcript can be typed into the
         # wrong window.
         self.source_window = backend.active_window() if remember_focus else None
+
+        # Put a Bluetooth headset into hands-free mode and record from it. In
+        # A2DP it has no microphone at all, so without this the clip silently
+        # comes from the laptop's own mic instead.
+        if headset_mic and not device:
+            headset_source = self._headset.engage()
+            if headset_source:
+                device = headset_source
 
         cmd = backend.record_command(
             self.raw_path,
@@ -107,6 +116,7 @@ class Recorder:
             self._proc.kill()
             self._proc.wait(timeout=5)
         proc, self._proc = self._proc, None
+        self._headset.restore()
 
         if not self.raw_path.exists() or self.raw_path.stat().st_size == 0:
             stderr = (proc.stderr.read().decode(errors="replace") if proc.stderr else "").strip()
@@ -123,6 +133,7 @@ class Recorder:
             except subprocess.TimeoutExpired:
                 self._proc.kill()
             self._proc = None
+        self._headset.restore()
         self.raw_path.unlink(missing_ok=True)
         self.wav_path.unlink(missing_ok=True)
 

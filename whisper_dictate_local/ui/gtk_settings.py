@@ -344,11 +344,12 @@ class SettingsDialog(Gtk.Window):
         self.headset_check.set_active(bool(cfg["request_headset_mic"]))
         page.add_wide(
             self.headset_check,
-            hint="Marks the recording as a call so the system switches the "
-                 "headset to hands-free mode, then switches back. Costs about "
-                 "a second per dictation, and while recording your headphone "
-                 "audio drops to narrowband mono. Your laptop's own microphone "
-                 "is usually the better choice for accuracy.",
+            hint="Switches the headset to hands-free mode for the recording "
+                 "and back afterwards, which is the only way it offers a "
+                 "microphone at all — in A2DP it has none. Costs a fraction of "
+                 "a second, and while recording your headphone audio drops to "
+                 "narrowband mono. Your laptop's own microphone is usually the "
+                 "better choice for accuracy.",
             unavailable="" if backend.TOOLS.can_switch_headset_profile
             else "profile switching is a PulseAudio feature and this machine "
                  "records with another tool",

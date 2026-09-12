@@ -533,6 +533,18 @@ are greyed out with the reason:
   so `capture_output=True` waits for an EOF that only arrives when someone else
   copies something, blocking each dictation for the full 10s timeout and then
   raising. Closing stdout and stderr instead takes it from 10s to 4ms.
+- **The Bluetooth profile is switched by the app, not by the desktop.**
+  WirePlumber is meant to do it in response to `media.role=Communication`, and
+  the stream still carries that tag, but Ubuntu 24.04's WirePlumber 0.4.17
+  ships an empty bluez rule set, so the policy never fires. Switching the card
+  with `pactl` directly is a few lines and behaves identically everywhere.
+  Two details cost real debugging: the capture node is listed for about a
+  second after the switch with a state of `(null)`, and recording from it then
+  produces an empty file and no error at all — so the app waits for a real
+  state, not merely for the node to exist. And a card caught mid-connection
+  reports its profile as `off`; restoring that verbatim would switch the
+  headset off entirely, so the restore falls back to the best A2DP profile the
+  card offers and verifies the change took.
 - **The app owns the global hotkey.** Cinnamon's custom-shortcut manager did not
   reliably pick up bindings written via `gsettings` outside its GUI, so the tray
   grabs the key with Keybinder instead.
@@ -563,17 +575,20 @@ microphone at all** - the profile is output-only. The mic only exists under
 HSP/HFP, which is a different profile the system has to switch into.
 
 Enable *Switch a Bluetooth headset to its microphone while recording* and the
-capture stream is tagged `media.role=Communication`. WirePlumber's bluetooth
-policy switches the headset to HSP/HFP for exactly those streams and restores
-the previous profile when the stream closes, so no manual switching is needed.
+app changes the card profile itself — `pactl set-card-profile` to HSP/HFP
+before recording, back to the previous profile afterwards — then records from
+the headset source explicitly.
 
-Two conditions and one trade-off:
+It does not rely on WirePlumber's own auto-switch policy. That policy exists,
+and the capture stream is still tagged `media.role=Communication` for setups
+where it works, but on Ubuntu 24.04 / Mint 22 (WirePlumber 0.4.17) the stock
+`50-bluez-config.lua` leaves its rule set empty, so `bluez5.autoswitch-profile`
+is never applied and nothing switches. Doing it directly behaves the same
+everywhere.
 
-- The headset must be the **current audio output**; the policy only acts when
-  the default sink is the Bluetooth device.
-- HSP/HFP is narrowband mono (CVSD 8 kHz, or mSBC 16 kHz where supported).
-  While recording, whatever you are listening to drops to that quality, and the
-  switch itself costs about a second each way.
+The trade-off remains: HSP/HFP is narrowband mono (CVSD 8 kHz, or mSBC 16 kHz
+where supported), so while recording, whatever you are listening to drops to
+that quality. Measured on this machine the switch each way takes about 0.1s.
 - A laptop's built-in digital microphone is full-band and usually gives Whisper
   **better accuracy** than a Bluetooth headset mic. Prefer it unless the headset
   is clearly better positioned for your voice.
