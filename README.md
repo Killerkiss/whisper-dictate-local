@@ -22,6 +22,7 @@ bar front end that has not yet been run on a Mac — see
 [Compatibility](#compatibility).
 
 **Just want it running?** → [Requirements](#requirements) → [Install](#install)
+· [Latest release](https://github.com/Killerkiss/whisper-dictate-local/releases/latest)
 
 | Section | What is in it |
 |---|---|
@@ -249,18 +250,19 @@ This step cannot be skipped by packaging: `large-v3` is 2.9 GiB, over GitHub's
 **From a package** (Debian, Ubuntu, Mint):
 
 ```bash
-./tools/make_deb.sh                                     # writes dist/
-sudo apt install ./dist/whisper-dictate-local_0.2.0_all.deb
+curl -LO https://github.com/Killerkiss/whisper-dictate-local/releases/download/v0.2.0/whisper-dictate-local_0.2.0_all.deb
+sudo apt install ./whisper-dictate-local_0.2.0_all.deb
 whisper-dictate-local --setup
 ```
 
-The path matters: `apt install` treats an argument without a `/` as a package
-name to look up, and answers a path that does not exist with the rather
-unhelpful `E: Unsupported file ... given on commandline`.
+The leading `./` matters: `apt install` treats an argument without a `/` as a
+package name to look up, and answers a path that does not exist with the
+rather unhelpful `E: Unsupported file ... given on commandline`.
 
 apt resolves GTK, the app indicator, Keybinder, `xdotool`, `xclip` and
 PulseAudio for you — the part that is otherwise easy to get wrong. The package
-contains the application only; `--setup` fetches the rest.
+contains the application only; `--setup` fetches the rest. To build it from a
+checkout instead, run `./tools/make_deb.sh`.
 
 **From source** (any distribution):
 
@@ -283,7 +285,8 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=1 \
 cmake --build build -j"$(nproc)"
 
 # 3. the app
-pipx install git+https://github.com/Killerkiss/whisper-dictate-local
+pipx install https://github.com/Killerkiss/whisper-dictate-local/releases/download/v0.2.0/whisper_dictate_local-0.2.0-py3-none-any.whl
+# or, for the latest changes:  pipx install git+https://github.com/Killerkiss/whisper-dictate-local
 ./install.sh          # DICTATE_KEY=F8 ./install.sh to pick another shortcut
 whisper-dictate-local-tray &
 ```
