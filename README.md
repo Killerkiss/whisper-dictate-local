@@ -446,9 +446,9 @@ edited by hand. Stored in `~/.config/whisper-dictate-local/config.json`.
 
 | General | Audio |
 |---|---|
-| ![The General tab: language, translation, result, shortcut, vocabulary hint, notifications and sound cues](docs/screenshots/settings-general.png) | ![The Audio tab: microphone, Bluetooth profile switching, pausing media, the silence gate, capture latency and typing delay](docs/screenshots/settings-audio.png) |
+| ![The General tab: language, translation, result, shortcut, vocabulary hint, notifications and sound cues](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-general.png) | ![The Audio tab: microphone, Bluetooth profile switching, pausing media, the silence gate, capture latency and typing delay](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-audio.png) |
 | **Engine** | **Advanced** |
-| ![The Engine tab: on-demand start, the idle timeout that releases VRAM, server URL and timeout](docs/screenshots/settings-engine.png) | ![The Advanced tab: model file, whisper-cli path, fallback CPU threads and the config file location](docs/screenshots/settings-advanced.png) |
+| ![The Engine tab: on-demand start, the idle timeout that releases VRAM, server URL and timeout](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-engine.png) | ![The Advanced tab: model file, whisper-cli path, fallback CPU threads and the config file location](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-advanced.png) |
 
 Shown in Mint-Y-Dark; the dialog follows your GTK theme. Regenerate the
 screenshots after a UI change with `python3 tools/make_screenshots.py`.
@@ -469,7 +469,7 @@ The same tab on a Wayland session, where typing is impossible — *Result* offer
 only the clipboard, hold-to-talk is gone, and the shortcut and focus settings
 are greyed out with the reason:
 
-![The General tab on Wayland: a banner explains the session's limits, the Result list contains only the clipboard option, and the shortcut, hold-to-talk and focus settings are greyed out](docs/screenshots/settings-wayland.png)
+![The General tab on Wayland: a banner explains the session's limits, the Result list contains only the clipboard option, and the shortcut, hold-to-talk and focus settings are greyed out](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-wayland.png)
 
 ### General
 
@@ -701,5 +701,5 @@ command only ever fails for strangers.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). whisper.cpp, which does the actual speech
+MIT — see [LICENSE](https://github.com/Killerkiss/whisper-dictate-local/blob/master/LICENSE). whisper.cpp, which does the actual speech
 recognition, is MIT as well.

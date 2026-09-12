@@ -87,7 +87,11 @@ fi
 
 rm -rf dist build ./*.egg-info
 "$ROOT/tools/make_deb.sh" >/dev/null
-python3 -c "import setuptools.build_meta as b; b.build_wheel('dist')" >/dev/null 2>&1
+# The sdist is not attached to the GitHub release, but building it here
+# means a broken source build is caught now rather than at PyPI upload time.
+python3 -c "
+import setuptools.build_meta as b
+b.build_wheel('dist'); b.build_sdist('dist')" >/dev/null 2>&1
 rm -rf build ./*.egg-info
 DEB="dist/whisper-dictate-local_${VERSION}_all.deb"
 WHL="dist/whisper_dictate_local-${VERSION}-py3-none-any.whl"

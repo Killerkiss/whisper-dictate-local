@@ -62,10 +62,36 @@ Ordinary semver, judged from the user's side: a fix that changes no behaviour
 is a patch, a new setting or a platform is a minor, anything that invalidates
 an existing config or install is a major.
 
+## PyPI
+
+Optional. Nothing in the install template needs it — `pipx` installs happily
+from a release URL — but publishing means `pipx install whisper-dictate-local`
+works without a URL, and `pipx upgrade` starts working.
+
+```bash
+pipx install twine
+export TWINE_USERNAME=__token__
+export TWINE_PASSWORD=pypi-AgEI...        # pypi.org/manage/account/token/
+
+./tools/publish_pypi.sh --test            # rehearse on test.pypi.org first
+./tools/publish_pypi.sh                   # the real thing
+```
+
+It is a **separate script from `make_release.sh` on purpose**. A GitHub release
+can be deleted and recut; a PyPI upload cannot. The version number is burned
+the moment it lands, even if you delete the file afterwards — so rehearse on
+test.pypi.org, and the real upload asks for confirmation.
+
+The script also refuses to upload if the README contains a relative link.
+PyPI renders the README as the project page and resolves nothing against the
+repository, so `docs/screenshots/x.png` shows a broken image there while
+looking perfect on GitHub. Image and file links are absolute
+`raw.githubusercontent.com` and `github.com/.../blob/` URLs for that reason —
+they work in both places.
+
 ## Manual steps that remain
 
 - `python3 tools/make_screenshots.py` after any settings UI change. The
   screenshots are generated from `DEFAULTS`, never from the developer's own
   config, so they cannot leak a home directory or a personal vocabulary hint.
-- Publishing to PyPI, if that is ever wanted. It is not needed for any command
-  in the install template: `pipx` installs happily from a release URL.
+- Deciding whether a release goes to PyPI at all.
