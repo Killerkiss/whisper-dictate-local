@@ -24,7 +24,7 @@ AMPLITUDE = 0.45
 
 CACHE_DIR = (
     Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-    / "uk-dictate"
+    / "whisper-dictate-local"
     / "sounds"
 )
 STAMP = CACHE_DIR / ".generated.json"

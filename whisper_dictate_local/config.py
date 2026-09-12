@@ -1,6 +1,6 @@
-"""Persistent configuration for uk-dictate.
+"""Persistent configuration for whisper-dictate-local.
 
-Stored as JSON in ~/.config/uk-dictate/config.json so both the tray app and the
+Stored as JSON in ~/.config/whisper-dictate-local/config.json so both the tray app and the
 CLI entry point read the same settings.
 """
 
@@ -9,13 +9,37 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "uk-dictate"
+_CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+CONFIG_DIR = _CONFIG_HOME / "whisper-dictate-local"
 CONFIG_PATH = CONFIG_DIR / "config.json"
+
+# The project was called uk-dictate until it grew past a single input language.
+# Settings are worth carrying over rather than silently resetting, so the old
+# directory is moved across once, the first time the renamed app runs.
+LEGACY_CONFIG_DIR = _CONFIG_HOME / "uk-dictate"
+
+
+def migrate_legacy_config() -> bool:
+    """Move a pre-rename config into place. True if anything was moved."""
+    if CONFIG_DIR.exists() or not LEGACY_CONFIG_DIR.is_dir():
+        return False
+    try:
+        CONFIG_DIR.parent.mkdir(parents=True, exist_ok=True)
+        # shutil.move rather than rename: XDG_CONFIG_HOME and the home
+        # directory are not guaranteed to be on the same filesystem.
+        shutil.move(str(LEGACY_CONFIG_DIR), str(CONFIG_DIR))
+    except OSError as exc:
+        # Never fatal: the app still works, just with default settings.
+        log.warning("could not migrate settings from %s (%s)", LEGACY_CONFIG_DIR, exc)
+        return False
+    log.info("settings migrated from %s to %s", LEGACY_CONFIG_DIR, CONFIG_DIR)
+    return True
 
 DEFAULTS: dict[str, Any] = {
     # Global shortcut, grabbed by the tray itself via Keybinder. Cinnamon's own
@@ -116,6 +140,7 @@ class Config:
     # -- persistence --------------------------------------------------------
     @classmethod
     def load(cls) -> "Config":
+        migrate_legacy_config()
         if not CONFIG_PATH.exists():
             cfg = cls()
             cfg.save()

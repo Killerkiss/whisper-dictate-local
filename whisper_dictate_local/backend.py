@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 
-STATE_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "uk-dictate"
+STATE_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "whisper-dictate-local"
 
 
 class DictationError(Exception):

@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ukdictate import sounds  # noqa: E402
+from whisper_dictate_local import sounds  # noqa: E402
 
 lead = int(sys.argv[1]) if len(sys.argv) > 1 else 600
 sounds.generate(lead)

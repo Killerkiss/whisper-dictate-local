@@ -135,7 +135,7 @@ def _check(cfg: Config) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="uk-dictate",
+        prog="whisper-dictate-local",
         description="Toggle dictation. Bind this to a keyboard shortcut.",
     )
     parser.add_argument("--no-tray", action="store_true",

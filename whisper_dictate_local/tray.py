@@ -38,7 +38,7 @@ from .settings_dialog import SettingsDialog  # noqa: E402
 
 log = logging.getLogger(__name__)
 
-APP_ID = "uk-dictate"
+APP_ID = "whisper-dictate-local"
 # How often push-to-talk checks whether the key is still down. 40ms is well
 # below human reaction time and costs nothing measurable.
 POLL_RELEASE_MS = 40
@@ -47,9 +47,9 @@ PIDFILE = STATE_DIR / "tray.pid"
 # Installed into ~/.local/share/icons/hicolor/scalable/apps by install.sh.
 # The recording/busy icons are full-colour on purpose: a "-symbolic" icon gets
 # recoloured to the panel foreground, which would throw away the red.
-ICON_IDLE = "uk-dictate-idle-symbolic"
-ICON_RECORDING = "uk-dictate-recording"
-ICON_BUSY = "uk-dictate-busy"
+ICON_IDLE = "whisper-dictate-local-idle-symbolic"
+ICON_RECORDING = "whisper-dictate-local-recording"
+ICON_BUSY = "whisper-dictate-local-busy"
 
 # Fall back to stock names if the themed icons are not installed.
 ICON_FALLBACK = {

@@ -3,15 +3,15 @@ Type=Application
 Name=Dictation
 GenericName=Speech to Text
 Comment=Speak and have the text typed into the focused window
-Exec=@BIN_DIR@/uk-dictate-tray
+Exec=@BIN_DIR@/whisper-dictate-local-tray
 Icon=audio-input-microphone
 Terminal=false
 Categories=Utility;
-Keywords=dictation;speech;voice;whisper;transcribe;translate;ukrainian;
+Keywords=dictation;speech;voice;whisper;transcribe;translate;stt;
 StartupNotify=false
 X-GNOME-Autostart-enabled=true
 Actions=Toggle;
 
 [Desktop Action Toggle]
 Name=Start / stop dictation
-Exec=@BIN_DIR@/uk-dictate
+Exec=@BIN_DIR@/whisper-dictate-local

@@ -265,7 +265,7 @@ class SettingsDialog(Gtk.Window):
         else:
             page.add("Global shortcut", self.hotkey_entry,
                      unavailable="this session keeps shortcuts to itself. Bind a "
-                                 "key to the 'uk-dictate' command in your "
+                                 "key to the 'whisper-dictate-local' command in your "
                                  "desktop's own keyboard settings instead")
 
         self.mode_combo = Gtk.ComboBoxText()

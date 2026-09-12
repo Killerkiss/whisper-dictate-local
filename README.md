@@ -1,9 +1,20 @@
-# uk-dictate
+# whisper-dictate-local
 
-Push-a-key dictation for Linux: speak Ukrainian, get English text typed into
-whatever window you are using. Everything runs locally on the GPU via
+Push-a-key dictation for Linux. Speak, and the text appears in whatever window
+you were already typing in. Everything runs locally on the GPU via
 [whisper.cpp](https://github.com/ggml-org/whisper.cpp) — no API keys, no audio
 leaving the machine.
+
+It works two ways, switched by a single setting:
+
+- **Transcribe** — the text comes out in the language you spoke. Whisper handles
+  around a hundred, and the dialog offers a shortlist you can extend by hand.
+- **Translate to English** — speak any supported language, get English. This is
+  Whisper's own translate task, and English is the only target it has; other
+  target languages would need a separate translation step.
+
+The author's daily use is Ukrainian in, English out, which is why the shortlist
+and the defaults start there.
 
 Developed on Linux Mint / Cinnamon, and works on any **X11** desktop.
 Wayland is limited to clipboard output — see [Compatibility](#compatibility).
@@ -11,15 +22,15 @@ Wayland is limited to clipboard output — see [Compatibility](#compatibility).
 ## How it works
 
 ```
-global shortcut ──► uk-dictate ──► tray app (SIGUSR1)
-                                      │
-                        parecord ─────┤ raw PCM
-                                      │
-                          silence gate │  (RMS dBFS)
-                                      │
-                    whisper-server ───┤  HTTP, model stays resident
-                                      │
-                         xdotool type ┘  + clipboard copy
+global shortcut ──► whisper-dictate-local ──► tray app (SIGUSR1)
+                                                  │
+                                    parecord ─────┤ raw PCM
+                                                  │
+                                  silence gate ───┤ (RMS dBFS)
+                                                  │
+                              whisper-server ─────┤ HTTP, model stays resident
+                                                  │
+                                 xdotool type ────┘ + clipboard copy
 ```
 
 Two shortcut behaviours, switchable in Settings:
@@ -92,10 +103,10 @@ input into another. On a Wayland session:
   Use toggle mode.
 - **Focus restore does not work** and is unnecessary in copy mode.
 - **The global shortcut must come from your compositor.** Bind your key to the
-  `uk-dictate` command in the desktop's own keyboard settings; the CLI signals
+  `whisper-dictate-local` command in the desktop's own keyboard settings; the CLI signals
   the running tray, so behaviour is identical to the built-in grab.
 
-Run `uk-dictate --check` to see exactly what your session supports. The
+Run `whisper-dictate-local --check` to see exactly what your session supports. The
 settings dialog adapts to it too — [see the screenshot](#settings).
 
 ### Without systemd
@@ -180,7 +191,7 @@ transcription only, and its translation quality is noticeably worse.
 
 ```bash
 ./install.sh          # DICTATE_KEY=F8 ./install.sh to pick another shortcut
-uk-dictate-tray &
+whisper-dictate-local-tray &
 ```
 
 This symlinks the launchers into `~/.local/bin`, enables the speech engine as a
@@ -198,7 +209,7 @@ user service, autostarts the tray, and binds the shortcut.
 
 Right-click the panel icon → **Settings**. Every option lives in the UI across
 four tabs — General, Audio, Engine, Advanced — and nothing needs the JSON to be
-edited by hand. Stored in `~/.config/uk-dictate/config.json`.
+edited by hand. Stored in `~/.config/whisper-dictate-local/config.json`.
 
 | General | Audio |
 |---|---|
@@ -259,7 +270,7 @@ are greyed out with the reason:
   tray menu does not send text to the panel.
 - **Silence gate uses peak + spread, not a whole-clip average.** A short
   phrase surrounded by pauses averages out to near-silence; measured on a real
-  6s Ukrainian phrase, the mean was -47 dB (below a -45 gate) while the peak was
+  6s spoken phrase, the mean was -47 dB (below a -45 gate) while the peak was
   -38.6 dB against a -51 dB floor. Peak-vs-floor also survives changes in mic
   gain, which an absolute average does not.
 - **Language is always sent explicitly.** whisper's own default is `en`, not
@@ -287,7 +298,7 @@ are greyed out with the reason:
   tool for each job — record, type, clipboard, play, focus, engine — by probing
   what is installed, never by checking the distribution. The rest of the app is
   written in terms of intent, so Wayland support is a detection branch rather
-  than a fork, and `uk-dictate --check` can report the result.
+  than a fork, and `whisper-dictate-local --check` can report the result.
 - **The clipboard copy must not capture output.** X11 and Wayland have no
   clipboard storage: the process that ran the copy stays alive to serve the
   selection. `xclip` forks such a child, which inherits any pipe it is given —
@@ -349,9 +360,9 @@ subtitles in its training data. Check the mic, not the settings.
 ## Troubleshooting
 
 ```bash
-uk-dictate --check                         # what this machine supports
+whisper-dictate-local --check                         # what this machine supports
 journalctl --user -u whisper-server -f     # engine logs
-uk-dictate --no-tray                       # bypass the tray
+whisper-dictate-local --no-tray                       # bypass the tray
 systemctl --user restart whisper-server
 ```
 
@@ -359,7 +370,7 @@ systemctl --user restart whisper-server
 job. It is the first thing to include in a bug report, because what works
 depends on the session rather than the distribution.
 
-Nothing typed? Run `uk-dictate --check` first — on a Wayland session typing is
+Nothing typed? Run `whisper-dictate-local --check` first — on a Wayland session typing is
 impossible and the text goes to the clipboard instead. On X11 with `xdotool`
 present, the likely cause is an Electron or Java window ignoring synthetic key
 events; the clipboard copy is the fallback.

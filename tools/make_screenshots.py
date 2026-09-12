@@ -42,7 +42,7 @@ def capture(filename: str, session: str, hidden: tuple[str, ...], page: int) -> 
     A child process because capability detection runs at import time: masking
     tools in-process would leak into the next shot.
     """
-    title = f"uk-dictate-shot-{os.getpid()}-{page}"
+    title = f"whisper-dictate-local-shot-{os.getpid()}-{page}"
     script = f"""
 import os, shutil, sys
 os.environ["XDG_SESSION_TYPE"] = {session!r}
@@ -55,11 +55,11 @@ from pathlib import Path
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib
-from ukdictate import backend, settings_dialog
-from ukdictate.config import Config, DEFAULTS
+from whisper_dictate_local import backend, settings_dialog
+from whisper_dictate_local.config import Config, DEFAULTS
 backend.refresh()
 # Never this machine's real path.
-settings_dialog.CONFIG_PATH = Path("~/.config/uk-dictate/config.json")
+settings_dialog.CONFIG_PATH = Path("~/.config/whisper-dictate-local/config.json")
 dlg = settings_dialog.SettingsDialog(Config(dict(DEFAULTS)))
 dlg.set_title({title!r})
 dlg.show_all()

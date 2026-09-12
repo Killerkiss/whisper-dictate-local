@@ -13,13 +13,42 @@ MODEL="${MODEL:-$HOME/opt/whisper.cpp/models/ggml-large-v3.bin}"
 
 say() { printf '  %s\n' "$*"; }
 
-echo "Installing uk-dictate from $ROOT"
+# Warned about at the end rather than killed: quitting it from its own menu
+# lets it stop the speech engine and release VRAM the way it expects to.
+pgrep -f 'whisper_dictate_local.tray|ukdictate.tray|uk-dictate-tray' >/dev/null 2>&1 \
+    && LEGACY_TRAY_RUNNING=1 || true
+
+echo "Installing whisper-dictate-local from $ROOT"
 
 mkdir -p "$BIN_DIR" "$UNIT_DIR" "$AUTOSTART_DIR"
 
-ln -sf "$ROOT/bin/uk-dictate"      "$BIN_DIR/uk-dictate"
-ln -sf "$ROOT/bin/uk-dictate-tray" "$BIN_DIR/uk-dictate-tray"
-say "launchers -> $BIN_DIR"
+# -- clean up the pre-rename install -----------------------------------------
+# The project was called uk-dictate. Its autostart entry points at a launcher
+# that no longer exists, so leaving it behind means a failed app at every login
+# and, worse, a stale menu entry that looks like the real thing. Settings are
+# NOT touched here: the app migrates ~/.config/uk-dictate itself on first run.
+LEGACY_FILES=(
+    "$AUTOSTART_DIR/uk-dictate-tray.desktop"
+    "$HOME/.local/share/applications/uk-dictate-tray.desktop"
+    "$HOME/.local/share/icons/hicolor/scalable/apps/uk-dictate-recording.svg"
+    "$HOME/.local/share/icons/hicolor/scalable/apps/uk-dictate-busy.svg"
+    "$HOME/.local/share/icons/hicolor/scalable/apps/uk-dictate-idle-symbolic.svg"
+    "$BIN_DIR/uk-dictate-tray"
+)
+removed=0
+for f in "${LEGACY_FILES[@]}"; do
+    if [ -e "$f" ] || [ -L "$f" ]; then rm -f "$f"; removed=$((removed + 1)); fi
+done
+# Regenerated on demand with the configured lead-in, so not worth migrating.
+rm -rf "$HOME/.local/share/uk-dictate"
+[ "$removed" -gt 0 ] && say "removed $removed file(s) from the old uk-dictate install"
+
+ln -sf "$ROOT/bin/whisper-dictate-local"      "$BIN_DIR/whisper-dictate-local"
+ln -sf "$ROOT/bin/whisper-dictate-local-tray" "$BIN_DIR/whisper-dictate-local-tray"
+# Kept so an existing keyboard shortcut bound to `uk-dictate` still works.
+# Drop it once you have repointed the shortcut at the new command.
+ln -sf "$ROOT/bin/whisper-dictate-local"      "$BIN_DIR/uk-dictate"
+say "launchers -> $BIN_DIR (with a uk-dictate compatibility link)"
 
 # -- speech engine service ---------------------------------------------------
 # Without systemd there is no unit to install: the app starts whisper-server
@@ -47,9 +76,9 @@ fi
 # -- icons -------------------------------------------------------------------
 ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
 mkdir -p "$ICON_DIR"
-cp "$ROOT/icons/uk-dictate-recording.svg" "$ICON_DIR/"
-cp "$ROOT/icons/uk-dictate-busy.svg"      "$ICON_DIR/"
-cp "$ROOT/icons/uk-dictate-idle.svg"      "$ICON_DIR/uk-dictate-idle-symbolic.svg"
+cp "$ROOT/icons/whisper-dictate-local-recording.svg" "$ICON_DIR/"
+cp "$ROOT/icons/whisper-dictate-local-busy.svg"      "$ICON_DIR/"
+cp "$ROOT/icons/whisper-dictate-local-idle.svg"      "$ICON_DIR/whisper-dictate-local-idle-symbolic.svg"
 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
 say "icons installed"
 
@@ -57,13 +86,13 @@ say "icons installed"
 APPS_DIR="$HOME/.local/share/applications"
 mkdir -p "$APPS_DIR"
 
-sed "s|@BIN_DIR@|$BIN_DIR|g" "$ROOT/desktop/uk-dictate-tray.desktop.in" \
-    > "$APPS_DIR/uk-dictate-tray.desktop"
-chmod +x "$APPS_DIR/uk-dictate-tray.desktop"
+sed "s|@BIN_DIR@|$BIN_DIR|g" "$ROOT/desktop/whisper-dictate-local-tray.desktop.in" \
+    > "$APPS_DIR/whisper-dictate-local-tray.desktop"
+chmod +x "$APPS_DIR/whisper-dictate-local-tray.desktop"
 say "menu entry -> $APPS_DIR (search the menu for \"Dictation\")"
 
 # Autostart reuses the same file, so the two can never drift apart.
-cp "$APPS_DIR/uk-dictate-tray.desktop" "$AUTOSTART_DIR/uk-dictate-tray.desktop"
+cp "$APPS_DIR/whisper-dictate-local-tray.desktop" "$AUTOSTART_DIR/whisper-dictate-local-tray.desktop"
 say "tray autostart installed"
 
 if command -v update-desktop-database >/dev/null; then
@@ -79,10 +108,13 @@ if command -v gsettings >/dev/null && gsettings list-schemas | grep -q org.cinna
         gsettings set org.cinnamon.desktop.keybindings custom-list "['custom0']"
     fi
     gsettings set "org.cinnamon.desktop.keybindings.custom-keybinding:$P" name "Dictation (toggle)"
-    gsettings set "org.cinnamon.desktop.keybindings.custom-keybinding:$P" command "$BIN_DIR/uk-dictate"
+    gsettings set "org.cinnamon.desktop.keybindings.custom-keybinding:$P" command "$BIN_DIR/whisper-dictate-local"
     gsettings set "org.cinnamon.desktop.keybindings.custom-keybinding:$P" binding "['$KEY']"
     say "shortcut bound to $KEY"
 fi
 
 echo
-echo "Done. Start the tray now with:  uk-dictate-tray &"
+echo "Done. Start the tray now with:  whisper-dictate-local-tray &"
+if [ -n "${LEGACY_TRAY_RUNNING:-}" ]; then
+    echo "A uk-dictate tray is still running; quit it from its panel menu first."
+fi
