@@ -43,7 +43,6 @@ LANGUAGES = [
     ("de", "German"),
     ("es", "Spanish"),
     ("fr", "French"),
-    ("ru", "Russian"),
 ]
 
 ALL_OUTPUT_MODES = [
