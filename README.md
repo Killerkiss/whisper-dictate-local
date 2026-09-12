@@ -445,7 +445,9 @@ edited by hand. Stored in `~/.config/whisper-dictate-local/config.json`.
 
 | General | Audio |
 |---|---|
-| ![The General tab: language, translation, result, shortcut and notification settings](docs/screenshots/settings-general.png) | ![The Audio tab: microphone, Bluetooth profile switching, the silence gate and capture latency](docs/screenshots/settings-audio.png) |
+| ![The General tab: language, translation, result, shortcut, vocabulary hint, notifications and sound cues](docs/screenshots/settings-general.png) | ![The Audio tab: microphone, Bluetooth profile switching, pausing media, the silence gate, capture latency and typing delay](docs/screenshots/settings-audio.png) |
+| **Engine** | **Advanced** |
+| ![The Engine tab: on-demand start, the idle timeout that releases VRAM, server URL and timeout](docs/screenshots/settings-engine.png) | ![The Advanced tab: model file, whisper-cli path, fallback CPU threads and the config file location](docs/screenshots/settings-advanced.png) |
 
 Shown in Mint-Y-Dark; the dialog follows your GTK theme. Regenerate the
 screenshots after a UI change with `python3 tools/make_screenshots.py`.

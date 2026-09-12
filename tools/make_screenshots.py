@@ -31,6 +31,8 @@ OUT_DIR = ROOT / "docs" / "screenshots"
 SHOTS = [
     ("settings-general.png", "x11", (), 0, "everything available"),
     ("settings-audio.png", "x11", (), 1, "everything available"),
+    ("settings-engine.png", "x11", (), 2, "everything available"),
+    ("settings-advanced.png", "x11", (), 3, "everything available"),
     ("settings-wayland.png", "wayland", ("xdotool", "wtype", "ydotool"), 0,
      "no way to type"),
 ]
@@ -55,7 +57,8 @@ from pathlib import Path
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib
-from whisper_dictate_local import backend, settings_dialog
+from whisper_dictate_local import backend
+from whisper_dictate_local.ui import gtk_settings as settings_dialog
 from whisper_dictate_local.config import Config, DEFAULTS
 backend.refresh()
 # Never this machine's real path.
