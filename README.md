@@ -5,7 +5,8 @@ whatever window you are using. Everything runs locally on the GPU via
 [whisper.cpp](https://github.com/ggml-org/whisper.cpp) — no API keys, no audio
 leaving the machine.
 
-Built for Linux Mint / Cinnamon on X11.
+Developed on Linux Mint / Cinnamon, and works on any **X11** desktop.
+Wayland is limited to clipboard output — see [Compatibility](#compatibility).
 
 ## How it works
 
@@ -32,11 +33,112 @@ Hold mode needs `python3-xlib`. Shortcut libraries report key *presses* only, so
 the release is detected by reading the X keymap directly (`XQueryKeymap`) every
 40ms. Without Xlib the app stays in toggle mode and says so.
 
+## Compatibility
+
+The thing that decides whether this works is **your session type, not your
+distribution**. The app types text with `xdotool`, grabs the hotkey with
+Keybinder and reads held keys with `XQueryKeymap` — all three are X11. That line
+runs straight through Ubuntu and Fedora rather than around them, because both
+ship a Wayland session by default.
+
+| Session | Result |
+|---|---|
+| **X11 / Xorg** | everything works: typing, hold-to-talk, focus restore |
+| **Wayland** | clipboard output only — see below |
+
+### Verified
+
+- **Linux Mint 22 (Cinnamon, X11)** — the development machine. Everything below
+  is tested here.
+
+### Expected to work unchanged
+
+Any X11 session on a systemd distribution with a panel that shows app
+indicators. Only the package names differ:
+
+| Distribution | Notes |
+|---|---|
+| Mint (Cinnamon / MATE / Xfce) | X11 by default — nothing to change |
+| Debian 12, Ubuntu **on Xorg** | pick "Ubuntu on Xorg" at the login screen |
+| Kubuntu / KDE Plasma **on X11** | Plasma shows indicators natively |
+| Fedora Xfce / Cinnamon spins | X11 by default |
+| Arch, EndeavourOS, Manjaro (X11) | — |
+| openSUSE (X11) | — |
+| Pop!_OS | X11 by default |
+
+These follow from the code rather than from testing: the installer uses only
+freedesktop standard paths (`~/.local/bin`, `~/.config/autostart`, hicolor
+icons, `.desktop` files), and audio playback already falls back across
+`paplay` → `pw-play` → `aplay`, so PulseAudio and PipeWire are both fine.
+If you run one of these, a report either way is welcome.
+
+**GNOME needs an extension.** GNOME Shell removed the legacy tray, so the panel
+icon requires `gnome-shell-extension-appindicator`. Ubuntu ships and enables it
+by default; on stock Fedora GNOME you must install it yourself.
+
+### Wayland — partially
+
+Not a packaging gap; Wayland deliberately forbids one client from injecting
+input into another. On a Wayland session:
+
+- **Typing does not work.** Set *Result* to **Copy** in Settings and paste with
+  Ctrl+V. `wl-copy` is needed instead of `xclip`.
+- **Hold-to-talk does not work** — there is no equivalent of `XQueryKeymap`.
+  Use toggle mode.
+- **Focus restore does not work** and is unnecessary in copy mode.
+- **The global shortcut must come from your compositor.** Bind your key to the
+  `uk-dictate` command in the desktop's own keyboard settings; the CLI signals
+  the running tray, so behaviour is identical to the built-in grab.
+
+Full typing support on Wayland needs `ydotool` (which needs `/dev/uinput`
+access) or `wtype` (wlroots compositors only). Neither is wired up yet.
+
+### Not supported
+
+- **macOS / BSD.** `parecord`, `xdotool` and the GTK app indicator have no
+  equivalent there. macOS also needs a different audio backend and a menu bar
+  UI rather than a GTK tray.
+- **Distributions without systemd** (Void, Devuan, Alpine, Gentoo/OpenRC).
+  The app will start, but it cannot manage the speech engine as a user service
+  and silently falls back to the CLI path, which reloads the 3.5 GB model on
+  every dictation. Start `whisper-server` yourself and it behaves normally.
+
+### Dependencies by distribution
+
+Runtime packages, once whisper.cpp is built. Names are a starting point and may
+drift between releases.
+
+```bash
+# Debian / Ubuntu / Mint
+sudo apt install python3-gi python3-requests python3-xlib \
+    gir1.2-ayatanaappindicator3-0.1 gir1.2-keybinder-3.0 \
+    pulseaudio-utils xdotool xclip
+
+# Fedora
+sudo dnf install python3-gobject python3-requests python3-xlib \
+    libayatana-appindicator-gtk3 keybinder3 \
+    pulseaudio-utils xdotool xclip
+
+# Arch
+sudo pacman -S python-gobject python-requests python-xlib \
+    libayatana-appindicator libkeybinder3 \
+    libpulse xdotool xclip
+
+# openSUSE
+sudo zypper install python3-gobject python3-requests python3-xlib \
+    typelib-1_0-AyatanaAppIndicator3-0_1 typelib-1_0-Keybinder-3_0 \
+    pulseaudio-utils xdotool xclip
+```
+
+`python3-xlib` is only needed for hold-to-talk; without it the app stays in
+toggle mode and says so. On Wayland, swap `xclip` for `wl-clipboard`.
+
 ## Requirements
 
-Runtime packages (all present on a stock Mint 22 install except whisper.cpp):
+Everything except whisper.cpp is present on a stock Mint 22 install; see
+[Dependencies by distribution](#dependencies-by-distribution) for other systems.
 
-- `python3-gi`, `gir1.2-ayatanaappindicator3-0.1`, `gir1.2-keybinder-3.0`, GTK 3
+- GTK 3 with `python3-gi`, an app indicator library, and Keybinder
 - `python3-xlib` (only for hold-to-talk)
 - `pulseaudio-utils` (`parecord`), `xdotool`, `xclip`
 - whisper.cpp built with CUDA, plus a GGML model
