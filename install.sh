@@ -111,6 +111,9 @@ else
     mkdir -p "$ICON_DIR" "$APPS_DIR" "$AUTOSTART_DIR"
 
     ICONS="$ROOT/whisper_dictate_local/icons"
+    # The launcher icon, distinct from the three panel-state icons below: it
+    # sits among other application icons, so it is full colour on a tile.
+    cp "$ICONS/whisper-dictate-local.svg"           "$ICON_DIR/"
     cp "$ICONS/whisper-dictate-local-recording.svg" "$ICON_DIR/"
     cp "$ICONS/whisper-dictate-local-busy.svg"      "$ICON_DIR/"
     cp "$ICONS/whisper-dictate-local-idle.svg"      "$ICON_DIR/whisper-dictate-local-idle-symbolic.svg"
@@ -120,7 +123,7 @@ else
     sed "s|@BIN_DIR@|$BIN_DIR|g" "$ROOT/desktop/whisper-dictate-local-tray.desktop.in" \
         > "$APPS_DIR/whisper-dictate-local-tray.desktop"
     chmod +x "$APPS_DIR/whisper-dictate-local-tray.desktop"
-    say "menu entry -> $APPS_DIR (search the menu for \"Dictation\")"
+    say "menu entry -> $APPS_DIR (search the menu for \"Whisper Dictate\")"
 
     # Autostart reuses the same file, so the two can never drift apart.
     cp "$APPS_DIR/whisper-dictate-local-tray.desktop" \

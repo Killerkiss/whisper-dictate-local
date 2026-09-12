@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Application icon, for menus and app lists.
+
+       Full colour and on a tile, unlike the three panel icons: a launcher sits
+       among other application icons rather than among panel glyphs, so it has
+       to hold its own shape instead of borrowing the panel foreground. The
+       microphone geometry is the panel icons' scaled up, so the tray item and
+       the menu entry are recognisably the same app.
+
+       Keep "<svg" within the first ~200 bytes of the file: gdk-pixbuf sniffs
+       the format from the head of the file, and a comment above the element
+       is enough to make the desktop fail to load the icon at all. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a6fa5"/>
+      <stop offset="1" stop-color="#2f4a70"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="url(#tile)"/>
+
+  <g fill="#ffffff" transform="translate(32 32) scale(2.4) translate(-11 -11)">
+    <path d="M11 3a2.75 2.75 0 0 0-2.75 2.75v5a2.75 2.75 0 0 0 5.5 0v-5A2.75 2.75 0 0 0 11 3z"/>
+    <path d="M5.75 9.5a.75.75 0 0 0-.75.75v.5a6 6 0 0 0 5.25 5.953V18H8.5a.75.75 0 0 0 0 1.5h5a.75.75 0 0 0 0-1.5h-1.75v-1.297A6 6 0 0 0 17 10.75v-.5a.75.75 0 0 0-1.5 0v.5a4.5 4.5 0 0 1-9 0v-.5a.75.75 0 0 0-.75-.75z"/>
+  </g>
+</svg>

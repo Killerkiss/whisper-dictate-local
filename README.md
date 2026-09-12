@@ -283,7 +283,7 @@ The script branches on what the system is, not on what it is called:
 |---|---|---|
 | launchers | `~/.local/bin` | `~/.local/bin` |
 | autostart | `.desktop` in `~/.config/autostart` | LaunchAgent in `~/Library/LaunchAgents` |
-| icons | hicolor theme | none — the menu bar uses text |
+| icons | hicolor theme, plus a launcher icon | none — the menu bar uses text |
 | speech engine | systemd user service | child process, tracked by pidfile |
 | shortcut | bound via Cinnamon's `gsettings` if present | bound by you, see [macOS](#macos--needs-testing) |
 
@@ -291,6 +291,9 @@ It is safe to re-run, and it removes the leftovers of the old `uk-dictate`
 install if it finds any.
 
 ## Panel icon
+
+The menu entry is **Whisper Dictate**, with its own launcher icon. The panel
+icon is separate and changes with state:
 
 | state | icon |
 |---|---|

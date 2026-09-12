@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Dictation
+Name=Whisper Dictate
 GenericName=Speech to Text
 Comment=Speak and have the text typed into the focused window
 Exec=@BIN_DIR@/whisper-dictate-local-tray
-Icon=audio-input-microphone
+Icon=whisper-dictate-local
 Terminal=false
 Categories=Utility;
 Keywords=dictation;speech;voice;whisper;transcribe;translate;stt;
