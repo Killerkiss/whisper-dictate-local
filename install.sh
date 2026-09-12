@@ -33,6 +33,10 @@ mkdir -p "$BIN_DIR"
 if [ "$PLATFORM" != "macos" ]; then
     LEGACY_FILES=(
         "$HOME/.config/autostart/uk-dictate-tray.desktop"
+        # Earlier versions of this installer autostarted the tray. They no
+        # longer do, so an entry left from then would start an app the user
+        # never asked to have running.
+        "$HOME/.config/autostart/whisper-dictate-local-tray.desktop"
         "$HOME/.local/share/applications/uk-dictate-tray.desktop"
         "$HOME/.local/share/icons/hicolor/scalable/apps/uk-dictate-recording.svg"
         "$HOME/.local/share/icons/hicolor/scalable/apps/uk-dictate-busy.svg"
@@ -45,7 +49,7 @@ if [ "$PLATFORM" != "macos" ]; then
     done
     # Regenerated on demand from the configured lead-in, so not worth moving.
     rm -rf "$HOME/.local/share/uk-dictate"
-    [ "$removed" -gt 0 ] && say "removed $removed file(s) from the old uk-dictate install"
+    [ "$removed" -gt 0 ] && say "removed $removed leftover file(s) from a previous install"
 fi
 
 # -- launchers ---------------------------------------------------------------
@@ -89,26 +93,18 @@ else
 fi
 
 # -- desktop integration -----------------------------------------------------
+# Nothing here starts the app at login. A dictation tool holds a microphone
+# and a global key grab; starting it unasked is the sort of thing a user
+# should opt into, in their own desktop's startup settings, rather than have
+# an installer decide for them. Add it there if you want it.
 if [ "$PLATFORM" = "macos" ]; then
-    AGENT_DIR="$HOME/Library/LaunchAgents"
-    LOG="$HOME/Library/Logs/whisper-dictate-local.log"
-    mkdir -p "$AGENT_DIR" "$(dirname "$LOG")"
-    PLIST="$AGENT_DIR/local.whisper-dictate-local.plist"
-
-    sed -e "s|@BIN_DIR@|$BIN_DIR|g" -e "s|@LOG@|$LOG|g" \
-        "$ROOT/launchd/local.whisper-dictate-local.plist.in" > "$PLIST"
-    # bootout first so a re-run picks up an edited plist rather than keeping
-    # whatever was loaded at login.
-    launchctl bootout "gui/$(id -u)/local.whisper-dictate-local" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null \
-        || launchctl load -w "$PLIST" 2>/dev/null \
-        || say "NOTE: could not load the launch agent; it will start at next login"
-    say "menu bar app autostarts at login (log: $LOG)"
+    # A LaunchAgent template ships in launchd/ for anyone who does want it;
+    # see the README.
+    say "not starting at login; add it to Login Items if you want that"
 else
     ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
     APPS_DIR="$HOME/.local/share/applications"
-    AUTOSTART_DIR="$HOME/.config/autostart"
-    mkdir -p "$ICON_DIR" "$APPS_DIR" "$AUTOSTART_DIR"
+    mkdir -p "$ICON_DIR" "$APPS_DIR"
 
     ICONS="$ROOT/whisper_dictate_local/icons"
     # The launcher icon, distinct from the three panel-state icons below: it
@@ -125,28 +121,9 @@ else
     chmod +x "$APPS_DIR/whisper-dictate-local-tray.desktop"
     say "menu entry -> $APPS_DIR (search the menu for \"Whisper Dictate\")"
 
-    # Autostart reuses the same file, so the two can never drift apart.
-    cp "$APPS_DIR/whisper-dictate-local-tray.desktop" \
-       "$AUTOSTART_DIR/whisper-dictate-local-tray.desktop"
-    say "tray autostart installed"
-
     command -v update-desktop-database >/dev/null \
         && update-desktop-database "$APPS_DIR" 2>/dev/null || true
 
-    # -- keyboard shortcut ---------------------------------------------------
-    if command -v gsettings >/dev/null \
-       && gsettings list-schemas 2>/dev/null | grep -q org.cinnamon.desktop.keybindings; then
-        KEY="${DICTATE_KEY:-F8}"
-        P="/org/cinnamon/desktop/keybindings/custom-keybindings/custom0/"
-        EXISTING="$(gsettings get org.cinnamon.desktop.keybindings custom-list)"
-        if [ "$EXISTING" = "@as []" ]; then
-            gsettings set org.cinnamon.desktop.keybindings custom-list "['custom0']"
-        fi
-        gsettings set "org.cinnamon.desktop.keybindings.custom-keybinding:$P" name "Dictation (toggle)"
-        gsettings set "org.cinnamon.desktop.keybindings.custom-keybinding:$P" command "$BIN_DIR/whisper-dictate-local"
-        gsettings set "org.cinnamon.desktop.keybindings.custom-keybinding:$P" binding "['$KEY']"
-        say "shortcut bound to $KEY"
-    fi
 fi
 
 echo
@@ -163,10 +140,11 @@ Done. Two things macOS needs from you:
   clipboard" and bind a key to the whisper-dictate-local command in Raycast,
   Hammerspoon, Karabiner or an Automator Quick Action.
 
-  Start it now with:  whisper-dictate-local-tray &
-  Check what was detected:  whisper-dictate-local --check
+  Then:  whisper-dictate-local --setup
+  and:   whisper-dictate-local-tray &
 EOF
 else
-    echo "Done. Start the tray now with:  whisper-dictate-local-tray &"
-    echo "Check what was detected with:  whisper-dictate-local --check"
+    echo "Done. Next:"
+    echo "    whisper-dictate-local --setup    # model, engine and the shortcut"
+    echo "    whisper-dictate-local-tray &"
 fi

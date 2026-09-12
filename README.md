@@ -384,13 +384,17 @@ desktop. It branches on what the system is, not on what it is called:
 | | Linux / BSD | macOS |
 |---|---|---|
 | launchers | `~/.local/bin` | `~/.local/bin` |
-| autostart | `.desktop` in `~/.config/autostart` | LaunchAgent in `~/Library/LaunchAgents` |
+| autostart | *none — see below* | *none — see below* |
 | icons | hicolor theme, plus a launcher icon | none — the menu bar uses text |
 | speech engine | systemd user service | child process, tracked by pidfile |
-| shortcut | bound via Cinnamon's `gsettings` if present | bound by you, see [macOS](#macos) |
+| shortcut | bound by `--setup` on Cinnamon and GNOME | bound by you, see [macOS](#macos) |
 
-It is safe to re-run, and it clears out the leftovers of the old `uk-dictate`
-install if it finds any.
+It is safe to re-run, and it clears out leftovers from previous installs.
+
+**Nothing starts at login.** A dictation tool holds a microphone and a global
+key grab, so starting it unasked is a decision for you rather than an
+installer. Add it in your desktop's startup settings, or on macOS in Login
+Items — a LaunchAgent template is in `launchd/` if you prefer that.
 
 ### Uninstalling
 

@@ -267,6 +267,98 @@ def install_prebuilt_engine(url: str) -> Path | None:
     return found
 
 
+
+# -- keyboard shortcut -------------------------------------------------------
+
+# (list schema, list key, per-binding schema, path prefix, list holds full paths)
+SHORTCUT_SCHEMAS = [
+    ("org.cinnamon.desktop.keybindings", "custom-list",
+     "org.cinnamon.desktop.keybindings.custom-keybinding",
+     "/org/cinnamon/desktop/keybindings/custom-keybindings/", False),
+    ("org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings",
+     "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding",
+     "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/", True),
+]
+
+
+def _gsettings(*args: str) -> str:
+    return _run(["gsettings", *args]).strip()
+
+
+def _parse_list(raw: str) -> list[str]:
+    """Turn a GVariant string array into a Python list."""
+    if not raw or raw.startswith("@as"):
+        return []
+    try:
+        import ast
+
+        value = ast.literal_eval(raw)
+        return [str(v) for v in value]
+    except (ValueError, SyntaxError):
+        return []
+
+
+def _shortcut_backend():
+    if not shutil.which("gsettings"):
+        return None
+    schemas = _run(["gsettings", "list-schemas"])
+    for entry in SHORTCUT_SCHEMAS:
+        if entry[0] in schemas:
+            return entry
+    return None
+
+
+def bind_shortcut(command: str, key: str) -> tuple[bool, str]:
+    """Bind `key` to `command` as a custom desktop shortcut.
+
+    Reuses an existing entry that already points at this app and otherwise
+    allocates the first free slot. The old installer wrote custom0
+    unconditionally, which silently destroyed whatever shortcut the user
+    already had there.
+    """
+    backend_ = _shortcut_backend()
+    if backend_ is None:
+        return False, "no supported shortcut settings found (Cinnamon or GNOME)"
+    list_schema, list_key, item_schema, prefix, full_paths = backend_
+
+    existing = _parse_list(_gsettings("get", list_schema, list_key))
+
+    slot = None
+    for entry in existing:
+        path = entry if entry.startswith("/") else f"{prefix}{entry}/"
+        current = _gsettings("get", f"{item_schema}:{path}", "command")
+        if "whisper-dictate-local" in current:
+            slot = (entry, path)
+            break
+
+    if slot is None:
+        used = {e.rstrip("/").rsplit("/", 1)[-1] if e.startswith("/") else e
+                for e in existing}
+        for i in range(64):
+            name = f"custom{i}"
+            if name not in used:
+                entry = f"{prefix}{name}/" if full_paths else name
+                slot = (entry, f"{prefix}{name}/")
+                existing = existing + [entry]
+                break
+        if slot is None:
+            return False, "no free shortcut slot"
+
+    entry, path = slot
+    schema_path = f"{item_schema}:{path}"
+    _gsettings("set", schema_path, "name", "Dictation (toggle)")
+    _gsettings("set", schema_path, "command", command)
+    # Cinnamon stores an array of accelerators; GNOME a single string.
+    binding = f"['{key}']" if not full_paths else f"'{key}'"
+    _gsettings("set", schema_path, "binding", binding)
+    _gsettings("set", list_schema, list_key, repr(existing).replace('"', "'"))
+
+    check = _gsettings("get", f"{item_schema}:{path}", "command")
+    if "whisper-dictate-local" not in check:
+        return False, "the setting did not take; bind it by hand"
+    return True, f"{key} -> {command}"
+
+
 # -- the wizard ---------------------------------------------------------------
 
 def run(assume_yes: bool = False, dry_run: bool = False) -> int:
@@ -333,7 +425,20 @@ def run(assume_yes: bool = False, dry_run: bool = False) -> int:
         else:
             _say(_build_instructions(kind))
 
-    _step("5. Configuration")
+    _step("5. Keyboard shortcut")
+    command = shutil.which("whisper-dictate-local") or "whisper-dictate-local"
+    key = str(cfg["hotkey"])
+    if dry_run:
+        _say(f"  would bind {key} to {command}")
+    elif _shortcut_backend() is None:
+        _say("  no Cinnamon or GNOME shortcut settings here.")
+        _say(f"  Bind {key} to `{command}` in your desktop's keyboard settings.")
+        _say("  On X11 the tray also grabs the key itself, so this is a fallback.")
+    elif _ask(f"  Bind {key} to start and stop dictation?", True, assume_yes):
+        ok, message = bind_shortcut(command, key)
+        _say(f"  {'bound: ' if ok else 'could not bind: '}{message}")
+
+    _step("6. Configuration")
     changed = []
     # Compare resolved paths: the config stores "~/opt/..." while these are
     # absolute, so comparing raw strings would rewrite settings that are
