@@ -392,6 +392,19 @@ desktop. It branches on what the system is, not on what it is called:
 It is safe to re-run, and it clears out the leftovers of the old `uk-dictate`
 install if it finds any.
 
+### Uninstalling
+
+```bash
+./uninstall.sh            # the application
+./uninstall.sh --purge    # settings and downloaded models too
+sudo apt remove whisper-dictate-local   # if you installed the package
+```
+
+It stops the tray before removing anything, so the engine is shut down
+properly and its VRAM released, and it releases the keyboard shortcut rather
+than leaving a key bound to a command that no longer exists. whisper.cpp and
+any model you built or downloaded yourself are never touched.
+
 **The GTK tray is deliberately not a Python dependency.** PyGObject and the app
 indicator typelibs cannot be installed reliably from PyPI — they need GTK
 headers and matching introspection data — so they come from the system package
