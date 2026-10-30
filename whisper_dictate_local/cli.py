@@ -72,7 +72,11 @@ def _standalone_toggle(cfg: Config) -> int:
 
         _raw_to_wav(raw, recorder.wav_path)
 
-        ok, peak, floor = has_speech(recorder.wav_path, cfg)
+        try:
+            ok, peak, floor = has_speech(recorder.wav_path, cfg)
+        except DictationError as exc:
+            _notify(f"Error: {exc}", cfg, level="error")
+            return 1
         if not ok:
             _notify(f"No speech detected (peak {peak:.0f} dB)", cfg)
             return 0

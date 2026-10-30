@@ -237,8 +237,15 @@ def has_speech(wav_path: Path, cfg: Config) -> tuple[bool, float, float]:
     Whisper invents fluent sentences when handed silence, so this must reject
     an empty room. Requires both an absolute peak and a clear gap between peak
     and noise floor, which keeps it working across mic gains and rooms.
+
+    Raises DictationError when every sample is exactly zero. Even a quiet room
+    leaves some noise on a live mic, so that clip comes from a muted or dead
+    source, and "no speech" would hide the problem.
     """
     peak, floor = speech_levels(wav_path)
+    if peak <= -120.0:
+        raise DictationError("the microphone is muted, every sample is silent. "
+                             "Unmute it in Sound settings")
     threshold = float(cfg["silence_threshold_db"])
     min_spread = float(cfg.get("min_speech_spread_db", 8.0))
     ok = peak >= threshold and (peak - floor) >= min_spread
