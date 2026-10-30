@@ -18,6 +18,8 @@ import time
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, Gtk, Pango  # noqa: E402
 
 from .. import backend, history  # noqa: E402
