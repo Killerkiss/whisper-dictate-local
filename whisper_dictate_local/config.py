@@ -113,6 +113,9 @@ DEFAULTS: dict[str, Any] = {
     "notifications": "errors",
     # Optional bias text; useful for names or jargon whisper keeps mangling.
     "initial_prompt": "",
+    # Keep every transcript in a local history (see history.py), so text that
+    # was typed into the wrong window -- or nowhere -- can still be recovered.
+    "keep_history": True,
 }
 
 

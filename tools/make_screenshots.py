@@ -7,7 +7,9 @@ Run after changing the settings UI:
 
 Two things matter here. The dialog is built from `DEFAULTS` rather than the
 config on this machine, so a personal vocabulary hint, a real microphone name
-or a home directory cannot end up in a public screenshot. And each shot is
+or a home directory cannot end up in a public screenshot. The same goes for
+the history: every shot reads a throwaway database of made-up transcripts,
+never the real one. And each shot is
 taken with a set of tools masked out, which is how the Wayland picture is
 produced from an X11 desktop -- capability detection is the only thing that
 distinguishes them.
@@ -33,9 +35,19 @@ SHOTS = [
     ("settings-audio.png", "x11", (), 1, "everything available"),
     ("settings-engine.png", "x11", (), 2, "everything available"),
     ("settings-advanced.png", "x11", (), 3, "everything available"),
+    ("settings-history.png", "x11", (), 4, "sample transcripts"),
     ("settings-wayland.png", "wayland", ("xdotool", "wtype", "ydotool"), 0,
      "no way to type"),
 ]
+
+
+# Oldest first, so the newest lands at the top of the list.
+SAMPLE_HISTORY = (
+    "Let's move the release to Thursday so QA has a full day.",
+    "The deploy failed because the staging database ran out of connections.",
+    "Remind me to update the README once the history tab is merged.",
+    "Can you review the pull request before lunch? It only touches the settings dialog.",
+)
 
 
 def capture(filename: str, session: str, hidden: tuple[str, ...], page: int) -> None:
@@ -57,12 +69,18 @@ from pathlib import Path
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib
-from whisper_dictate_local import backend
+import tempfile
+from whisper_dictate_local import backend, history
 from whisper_dictate_local.ui import gtk_settings as settings_dialog
 from whisper_dictate_local.config import Config, DEFAULTS
 backend.refresh()
 # Never this machine's real path.
 settings_dialog.CONFIG_PATH = Path("~/.config/whisper-dictate-local/config.json")
+settings_dialog.HISTORY_PATH = Path("~/.local/share/whisper-dictate-local/history.sqlite3")
+# Never this machine's real transcripts either.
+history.DB_PATH = Path(tempfile.mkdtemp()) / "history.sqlite3"
+for text in {SAMPLE_HISTORY!r}:
+    history.add(text, language="auto", translated=True)
 dlg = settings_dialog.SettingsDialog(Config(dict(DEFAULTS)))
 dlg.set_title({title!r})
 dlg.show_all()
