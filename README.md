@@ -442,13 +442,16 @@ the red away.
 
 Right-click the panel icon → **Settings**. Every option lives in the UI across
 four tabs — General, Audio, Engine, Advanced — and nothing needs the JSON to be
-edited by hand. Stored in `~/.config/whisper-dictate-local/config.json`.
+edited by hand. Stored in `~/.config/whisper-dictate-local/config.json`. A
+fifth tab, [History](#history), lists everything you have dictated.
 
 | General | Audio |
 |---|---|
 | ![The General tab: language, translation, result, shortcut, vocabulary hint, notifications and sound cues](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-general.png) | ![The Audio tab: microphone, Bluetooth profile switching, pausing media, the silence gate, capture latency and typing delay](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-audio.png) |
 | **Engine** | **Advanced** |
 | ![The Engine tab: on-demand start, the idle timeout that releases VRAM, server URL and timeout](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-engine.png) | ![The Advanced tab: model file, whisper-cli path, fallback CPU threads and the config file location](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-advanced.png) |
+| **History** | |
+| ![The History tab: a switch to keep transcripts, a search box, the list of past transcripts newest first, and Copy, Delete and Clear all buttons](https://raw.githubusercontent.com/Killerkiss/whisper-dictate-local/master/docs/screenshots/settings-history.png) | |
 
 Shown in Mint-Y-Dark; the dialog follows your GTK theme. Regenerate the
 screenshots after a UI change with `python3 tools/make_screenshots.py`.
@@ -517,6 +520,27 @@ are greyed out with the reason:
 | **Fallback CPU threads** | 4 | Caps the CPU use of that fallback path so it does not disturb other work. The GPU does the real work anyway. |
 
 The tab also shows the path to the config file, which you can select and copy.
+
+### History
+
+Every transcript is saved before it is typed or copied. Typed text leaves
+nothing behind, so a dictation that went to the wrong window, or to no window
+at all, is otherwise gone. Here you can get it back. Open the tab from the
+panel menu → **History**, or from Settings.
+
+| Control | What it does |
+|---|---|
+| **Keep a history of transcripts** | On by default. Turn it off and new transcripts are no longer saved; the ones already there stay until you clear them. Applied when you press Save. |
+| **Search** | Shows only transcripts containing the text, ignoring case in any alphabet. |
+| **Copy** | Copies the selected transcript to the clipboard. Double-clicking a row does the same. |
+| **Delete** / **Clear all** | Remove one transcript, or all of them after a confirmation. Both take effect at once, without Save, and clearing also wipes the old text from the file on disk. |
+
+The history lives in `~/.local/share/whisper-dictate-local/history.sqlite3`,
+readable only by you, and never leaves the computer. It is SQLite because the
+tray and the command-line toggle can both write to it at the same time.
+
+On macOS the menu bar has a **History** submenu instead, with the latest 15
+transcripts; clicking one copies it.
 
 ### Not in the dialog
 

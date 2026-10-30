@@ -13,13 +13,16 @@ no "type it" option at all rather than accepting one that silently fails.
 
 from __future__ import annotations
 
+import time
+
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gdk, Gtk, Pango  # noqa: E402
 
-from .. import backend  # noqa: E402
+from .. import backend, history  # noqa: E402
 from ..config import CONFIG_PATH, Config  # noqa: E402
+from ..history import DB_PATH as HISTORY_PATH  # noqa: E402
 
 
 def _hold_supported() -> bool:
@@ -114,8 +117,12 @@ def _entry(text: str, placeholder: str = "") -> Gtk.Entry:
     return e
 
 
+# Tab names a caller can open the dialog on.
+PAGES = ("general", "audio", "engine", "advanced", "history")
+
+
 class SettingsDialog(Gtk.Window):
-    def __init__(self, cfg: Config, on_saved=None) -> None:
+    def __init__(self, cfg: Config, on_saved=None, page: str = "general") -> None:
         super().__init__(title="Dictation Settings")
         self.cfg = cfg
         self.on_saved = on_saved
@@ -134,6 +141,12 @@ class SettingsDialog(Gtk.Window):
         notebook.append_page(self._page_audio(), Gtk.Label(label="Audio"))
         notebook.append_page(self._page_engine(), Gtk.Label(label="Engine"))
         notebook.append_page(self._page_advanced(), Gtk.Label(label="Advanced"))
+        notebook.append_page(self._page_history(), Gtk.Label(label="History"))
+        # Entries keep arriving while the dialog is open, so the list is read
+        # again whenever its tab is shown rather than once at construction.
+        notebook.connect("switch-page", self._on_switch_page)
+        self.notebook = notebook
+        self._start_page = PAGES.index(page) if page in PAGES else 0
 
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         actions.set_border_width(12)
@@ -150,6 +163,11 @@ class SettingsDialog(Gtk.Window):
 
         outer.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
         outer.pack_start(actions, False, False, 0)
+
+    def show_all(self) -> None:
+        super().show_all()
+        # A notebook ignores set_current_page for pages not yet shown.
+        self.notebook.set_current_page(self._start_page)
 
     # -- tabs ---------------------------------------------------------------
     def _banner(self, page: _Page) -> None:
@@ -455,6 +473,139 @@ class SettingsDialog(Gtk.Window):
         page.add_wide(path_label)
         return page
 
+    def _page_history(self) -> Gtk.Widget:
+        """Every transcript, newest first.
+
+        Not a settings page like the others: deleting or clearing takes effect
+        at once, because there is nothing sensible for Cancel to restore. Only
+        the switch that turns recording on or off waits for Save.
+        """
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_border_width(18)
+
+        self.history_check = Gtk.CheckButton(label="Keep a history of transcripts")
+        self.history_check.set_active(bool(self.cfg.get("keep_history", True)))
+        box.pack_start(self.history_check, False, False, 0)
+
+        hint = Gtk.Label(
+            label="Saved before the text is typed or copied, so a dictation "
+                  "that landed in the wrong window can be copied from here. "
+                  "Stays on this computer.",
+            xalign=0, wrap=True)
+        hint.set_max_width_chars(60)
+        hint.get_style_context().add_class("dim-label")
+        box.pack_start(hint, False, False, 0)
+
+        self.history_search = Gtk.SearchEntry()
+        self.history_search.set_placeholder_text("Search transcripts")
+        self.history_search.connect("search-changed", lambda *_: self._load_history())
+        box.pack_start(self.history_search, False, False, 0)
+
+        # id, when, text
+        self.history_store = Gtk.ListStore(int, str, str)
+        view = Gtk.TreeView(model=self.history_store)
+        view.set_headers_visible(True)
+        view.connect("row-activated", lambda *_: self._copy_selected())
+        self.history_view = view
+
+        when = Gtk.CellRendererText()
+        col = Gtk.TreeViewColumn("When", when, text=1)
+        view.append_column(col)
+
+        text = Gtk.CellRendererText()
+        text.set_property("wrap-mode", Pango.WrapMode.WORD_CHAR)
+        text.set_property("wrap-width", 380)
+        col = Gtk.TreeViewColumn("Text", text, text=2)
+        col.set_expand(True)
+        view.append_column(col)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_shadow_type(Gtk.ShadowType.IN)
+        scroll.add(view)
+        box.pack_start(scroll, True, True, 0)
+
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        copy = Gtk.Button(label="Copy")
+        copy.set_tooltip_text("Copy the selected transcript. Double-clicking a row does the same.")
+        copy.connect("clicked", lambda *_: self._copy_selected())
+        buttons.pack_start(copy, False, False, 0)
+
+        delete = Gtk.Button(label="Delete")
+        delete.connect("clicked", lambda *_: self._delete_selected())
+        buttons.pack_start(delete, False, False, 0)
+
+        clear = Gtk.Button(label="Clear all...")
+        clear.connect("clicked", lambda *_: self._clear_history())
+        buttons.pack_end(clear, False, False, 0)
+        box.pack_start(buttons, False, False, 0)
+
+        self.history_status = Gtk.Label(xalign=0)
+        self.history_status.get_style_context().add_class("dim-label")
+        self.history_status.set_selectable(True)
+        self.history_status.set_line_wrap(True)
+        box.pack_start(self.history_status, False, False, 0)
+
+        self._load_history()
+        return box
+
+    def _on_switch_page(self, _notebook, _page, index: int) -> None:
+        if PAGES[index] == "history":
+            self._load_history()
+
+    def _load_history(self) -> None:
+        query = self.history_search.get_text().strip()
+        entries = history.recent(query=query)
+        self.history_store.clear()
+        for e in entries:
+            stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(e.created_at))
+            self.history_store.append([e.id, stamp, e.text])
+        if entries:
+            shown = f"{len(entries)} shown"
+        elif query:
+            shown = "Nothing matches"
+        else:
+            shown = "No transcripts yet"
+        self.history_status.set_text(f"{shown}. Stored in {HISTORY_PATH}")
+
+    def _selected_history(self) -> tuple[int, str] | None:
+        model, it = self.history_view.get_selection().get_selected()
+        if it is None:
+            return None
+        return model[it][0], model[it][2]
+
+    def _copy_selected(self) -> None:
+        picked = self._selected_history()
+        if picked is None:
+            return
+        # The GTK clipboard rather than backend.copy_text: this runs inside the
+        # tray's own GTK process, which can own the selection without xclip,
+        # and store() hands it to the clipboard manager so it outlives us.
+        clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        clipboard.set_text(picked[1], -1)
+        clipboard.store()
+        self.history_status.set_text("Copied to the clipboard.")
+
+    def _delete_selected(self) -> None:
+        picked = self._selected_history()
+        if picked is None:
+            return
+        history.delete(picked[0])
+        self._load_history()
+
+    def _clear_history(self) -> None:
+        confirm = Gtk.MessageDialog(
+            transient_for=self, modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            text="Delete every saved transcript?")
+        confirm.format_secondary_text("This cannot be undone.")
+        answer = confirm.run()
+        confirm.destroy()
+        if answer == Gtk.ResponseType.OK:
+            history.clear()
+            self._load_history()
+
     # -- save ---------------------------------------------------------------
     def _on_save(self, *_args) -> None:
         c = self.cfg
@@ -491,6 +642,8 @@ class SettingsDialog(Gtk.Window):
         c["model"] = self.model_entry.get_text().strip() or c["model"]
         c["whisper_cli"] = self.cli_entry.get_text().strip() or c["whisper_cli"]
         c["cli_threads"] = int(self.threads_spin.get_value())
+
+        c["keep_history"] = self.history_check.get_active()
 
         c.save()
         if self.on_saved:

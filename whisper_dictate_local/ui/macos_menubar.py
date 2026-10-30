@@ -10,6 +10,8 @@ Two deliberate differences from the GTK tray:
   language, translate, where the text goes -- are toggles in the menu, and
   everything else opens the JSON in the default editor. A Cocoa form would
   duplicate 350 lines of GTK dialog for settings that are mostly set once.
+* **History is a submenu, not a tab.** The latest transcripts are listed in
+  the menu and clicking one copies it; there is no window to search them in.
 * **The global hotkey is optional.** It needs Accessibility permission, which
   macOS will not grant an unsigned interpreter without the user going into
   System Settings. When it is unavailable the app says so and still works --
@@ -33,7 +35,7 @@ from pathlib import Path
 
 import rumps
 
-from .. import backend, sounds
+from .. import backend, history, sounds
 from ..backend import STATE_DIR
 from ..config import CONFIG_PATH, Config
 from ..core import (
@@ -60,6 +62,9 @@ TITLES = {"idle": "🎙", "recording": "🔴", "busy": "•••"}
 # only run when the interpreter executes bytecode, and the Cocoa run loop does
 # not; this timer is what lets SIGUSR1 from the CLI ever be noticed.
 TICK_S = 0.1
+# The full history is in the database; a menu longer than this stops being a
+# menu.
+HISTORY_MENU_ITEMS = 15
 
 
 class MenuBarApp(rumps.App):
@@ -120,6 +125,8 @@ class MenuBarApp(rumps.App):
         self.item_translate = rumps.MenuItem("Translate to English",
                                              callback=self.on_translate)
         self.item_engine = rumps.MenuItem("Speech engine", callback=self.on_engine)
+        self.item_history = rumps.MenuItem("History")
+        self._history_shown = False
 
         self.menu = [
             self.item_toggle,
@@ -130,6 +137,7 @@ class MenuBarApp(rumps.App):
             ["Result", mode_items],
             self.item_translate,
             None,
+            self.item_history,
             self.item_engine,
             None,
             rumps.MenuItem("Edit settings file…", callback=self.on_edit_config),
@@ -138,6 +146,27 @@ class MenuBarApp(rumps.App):
             rumps.MenuItem("Quit", callback=self.on_quit),
         ]
         self._refresh_menu()
+        self._refresh_history()
+
+    def _refresh_history(self) -> None:
+        """List the latest transcripts; clicking one copies it."""
+        # rumps creates the submenu on the first add(), and clear() fails on an
+        # item that has none yet.
+        if self._history_shown:
+            self.item_history.clear()
+        self._history_shown = True
+        entries = history.recent(limit=HISTORY_MENU_ITEMS)
+        if not entries:
+            empty = rumps.MenuItem("No transcripts yet")
+            empty.set_callback(None)
+            self.item_history.add(empty)
+            return
+        for e in entries:
+            stamp = time.strftime("%H:%M", time.localtime(e.created_at))
+            preview = e.text if len(e.text) <= 50 else e.text[:47] + "..."
+            item = rumps.MenuItem(f"{stamp}  {preview}", callback=self.on_history_item)
+            item.history_text = e.text
+            self.item_history.add(item)
 
     def _refresh_menu(self) -> None:
         """Make the menu agree with the config. Called after every change."""
@@ -318,6 +347,7 @@ class MenuBarApp(rumps.App):
         self._set_state("idle")
         preview = text if len(text) <= 60 else text[:57] + "..."
         self.item_status.title = f"Last: {preview}"
+        self._refresh_history()
         self._notify(preview, title=f"Transcribed {secs:.0f}s")
 
     def _finish_error(self, message: str) -> None:
@@ -351,6 +381,10 @@ class MenuBarApp(rumps.App):
             self.engine.start()
         self._engine_started_by_us = False
         self._refresh_menu()
+
+    def on_history_item(self, sender) -> None:
+        backend.copy_text(sender.history_text)
+        self._notify("Copied to the clipboard")
 
     def on_edit_config(self, _sender) -> None:
         self.cfg.save()  # make sure the file exists before opening it

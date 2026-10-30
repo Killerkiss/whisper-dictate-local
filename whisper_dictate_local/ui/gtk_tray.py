@@ -89,6 +89,10 @@ class TrayApp:
 
         self.menu.append(Gtk.SeparatorMenuItem())
 
+        item_history = Gtk.MenuItem(label="History...")
+        item_history.connect("activate", lambda *_: self.open_settings(page="history"))
+        self.menu.append(item_history)
+
         item_settings = Gtk.MenuItem(label="Settings...")
         item_settings.connect("activate", self.open_settings)
         self.menu.append(item_settings)
@@ -344,8 +348,8 @@ class TrayApp:
 
         backend.play(path)
 
-    def open_settings(self, *_args) -> None:
-        dialog = SettingsDialog(self.cfg, on_saved=self._reload_config)
+    def open_settings(self, *_args, page: str = "general") -> None:
+        dialog = SettingsDialog(self.cfg, on_saved=self._reload_config, page=page)
         dialog.show_all()
 
     def _reload_config(self) -> None:

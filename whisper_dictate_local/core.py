@@ -17,7 +17,7 @@ from pathlib import Path
 
 import requests
 
-from . import backend
+from . import backend, history
 from .backend import STATE_DIR, DictationError  # re-exported: callers import them here
 from .config import Config
 
@@ -355,7 +355,13 @@ def deliver(text: str, cfg: Config, window: str | None = None) -> None:
     Typing is the only part that can be unavailable (Wayland forbids it), so
     when it is asked for and impossible the text is copied instead rather than
     silently lost -- the user still gets their words, one Ctrl+V away.
+
+    The transcript goes into the history first, so it survives whatever
+    happens to the keystrokes afterwards.
     """
+    if cfg.get("keep_history", True):
+        history.add(text, language=str(cfg["language"]), translated=bool(cfg["translate"]))
+
     mode = cfg["output_mode"]
     wants_type = mode in ("type", "type_and_copy")
     can_type = backend.TOOLS.can_type
